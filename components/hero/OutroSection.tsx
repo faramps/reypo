@@ -1,9 +1,11 @@
 "use client";
 
 import { useLanguage } from "@/lib/i18n";
+import { useContact } from "@/lib/contact";
 
 export default function OutroSection() {
   const { t } = useLanguage();
+  const { openContact } = useContact();
   const year = new Date().getFullYear();
 
   return (
@@ -19,6 +21,7 @@ export default function OutroSection() {
       </p>
       <button
         type="button"
+        onClick={openContact}
         className="services-reveal pointer-events-auto mt-10 rounded-full border border-white/15 bg-white/5 px-8 py-3.5 text-sm font-medium text-white backdrop-blur-md transition-colors hover:border-logo-red/60 hover:bg-white/10"
       >
         {t.cta}

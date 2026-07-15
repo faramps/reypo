@@ -82,25 +82,40 @@ export default function LensHousing({ highQuality }: Props) {
         />
       </instancedMesh>
 
-      {/* clear-coated glass element behind the iris */}
+      {/* clear-coated glass element behind the iris (Standard on low tier:
+          the clearcoat shader is too costly to compile/run on weak GPUs) */}
       <mesh position={[0, 0, -0.46]}>
         <circleGeometry args={[2.0, seg]} />
-        <meshPhysicalMaterial
-          color={"#070b16"}
-          metalness={0}
-          roughness={0.06}
-          clearcoat={1}
-          clearcoatRoughness={0.08}
-          reflectivity={0.6}
-          envMapIntensity={1.6}
-          emissive={palette.blue}
-          emissiveIntensity={0.03}
-        />
+        {highQuality ? (
+          <meshPhysicalMaterial
+            color={"#070b16"}
+            metalness={0}
+            roughness={0.06}
+            clearcoat={1}
+            clearcoatRoughness={0.08}
+            reflectivity={0.6}
+            envMapIntensity={1.6}
+            emissive={palette.blue}
+            emissiveIntensity={0.03}
+          />
+        ) : (
+          <meshStandardMaterial
+            color={"#070b16"}
+            metalness={0.1}
+            roughness={0.12}
+            envMapIntensity={1.6}
+            emissive={palette.blue}
+            emissiveIntensity={0.03}
+          />
+        )}
       </mesh>
 
       {/* charcoal lens FACE — sits in front of the blades and masks their outer
-          ends so the aperture reads as a clean circle no matter the twist */}
-      <mesh position={[0, 0, 0.06]}>
+          ends so the aperture reads as a clean circle, not a spiky star. Pushed
+          to z=0.11 so it clears every blade tip (the blades reach ~z=0.068 with
+          their anti-z-fight stagger) while still sitting behind the silver/red
+          framing rings (z=0.13) and the index ticks (z=0.14). */}
+      <mesh position={[0, 0, 0.11]}>
         <ringGeometry args={[1.97, 2.62, seg]} />
         <meshStandardMaterial
           color={palette.charcoal}

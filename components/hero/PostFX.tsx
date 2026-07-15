@@ -4,48 +4,47 @@ import type { ReactElement } from "react";
 import {
   EffectComposer,
   Bloom,
-  DepthOfField,
   Vignette,
   Noise,
 } from "@react-three/postprocessing";
 import { BlendFunction } from "postprocessing";
+import type { Tier } from "@/lib/quality";
 
 type Props = {
-  /** Subtle depth-of-field, focused on the eye. Off on low tier / reduced motion. */
-  enableDOF: boolean;
-  /** High tier enables MSAA for cleaner edges. */
-  highQuality: boolean;
+  /** Quality tier. Low drops grain + MSAA and lightens Bloom. */
+  tier: Tier;
 };
 
 /**
- * Cinematic post stack. DOF is kept gentle and focused on the eye (target at
- * origin) so the background constellations stay legible; grain is very light to
- * avoid the noisy patches heavy bokeh used to produce on tilted blades.
+ * Cinematic post stack: bloom for the emissive glow, a vignette to frame the
+ * stage, and (high tier only) a whisper of grain + MSAA.
+ *
+ * Note: there is deliberately NO depth-of-field. DOF blurs the whole scene off
+ * the focal plane, and during the cold-start shader compile that blur lingered
+ * for ~12s until PerformanceMonitor downgraded the tier and removed it — it read
+ * as a loading defect, not as cinema, so it's gone. Bloom + vignette carry the
+ * look at a fraction of the compile/fill cost.
  */
-export default function PostFX({ enableDOF, highQuality }: Props) {
+export default function PostFX({ tier }: Props) {
+  const highQuality = tier === "high";
+
   const effects = [
     <Bloom
       key="bloom"
-      intensity={0.55}
-      luminanceThreshold={0.45}
+      intensity={highQuality ? 0.55 : 0.4}
+      luminanceThreshold={highQuality ? 0.45 : 0.55}
       luminanceSmoothing={0.3}
       mipmapBlur
     />,
-    enableDOF ? (
-      <DepthOfField
-        key="dof"
-        target={[0, 0, 0]}
-        focusRange={0.2}
-        bokehScale={1.7}
+    <Vignette key="vignette" eskil={false} offset={0.32} darkness={0.62} />,
+    highQuality ? (
+      <Noise
+        key="noise"
+        premultiply
+        blendFunction={BlendFunction.OVERLAY}
+        opacity={0.05}
       />
     ) : null,
-    <Vignette key="vignette" eskil={false} offset={0.32} darkness={0.62} />,
-    <Noise
-      key="noise"
-      premultiply
-      blendFunction={BlendFunction.OVERLAY}
-      opacity={0.05}
-    />,
   ].filter((e): e is ReactElement => e !== null);
 
   return (

@@ -37,16 +37,51 @@ export type Dict = {
   videoKicker: string;
   videoHeading: string;
   videoBody: string;
+  /** Capability chips for the creative arm. */
+  videoTags: string[];
+  /** 3D headline that opens the works/video act (rendered in-scene). */
+  worksTitle: string;
 
   /** Software arm panel. */
   softwareKicker: string;
   softwareHeading: string;
   softwareBody: string;
+  /** Capability chips for the software arm. */
+  softwareTags: string[];
+
+  /** Showreel player. */
+  showreel: {
+    label: string;
+  };
+  /** Projection screen sound toggle. */
+  soundOn: string;
+  soundOff: string;
 
   /** Outro / CTA section. */
   outroKicker: string;
   outroHeading: string;
   outroSub: string;
+
+  /** Contact modal. */
+  contact: {
+    navLabel: string;
+    title: string;
+    subtitle: string;
+    nameLabel: string;
+    namePlaceholder: string;
+    emailLabel: string;
+    emailPlaceholder: string;
+    messageLabel: string;
+    messagePlaceholder: string;
+    submit: string;
+    successTitle: string;
+    successBody: string;
+    close: string;
+    orEmail: string;
+    errRequired: string;
+    errEmail: string;
+    mailSubject: string;
+  };
 };
 
 export const dictionaries: Record<Lang, Dict> = {
@@ -73,13 +108,40 @@ export const dictionaries: Record<Lang, Dict> = {
     videoHeading: "Işığı kaydeden taraf.",
     videoBody:
       "Motion tasarım, 3D ve film prodüksiyonu. Markanızın hikâyesini kareye çeken kreatif kol — makaralar dönmeye devam ediyor.",
+    videoTags: ["Motion", "3D", "Film", "Renk"],
+    worksTitle: "SEÇİLİ İŞLER",
     softwareKicker: "YAZILIM & SİSTEMLER",
     softwareHeading: "Vizyonu koda çeviren taraf.",
     softwareBody:
       "İmmersif web, gerçek-zamanlı 3D ve yapay zekâ. Fikri çalışan ürüne dönüştüren mühendislik kolu — kod akmaya devam ediyor.",
+    softwareTags: ["WebGL", "AI", "Gerçek-zaman", "Bulut"],
     outroKicker: "BİR SONRAKİ KARE",
     outroHeading: "Farklı gören bir şey inşa edelim.",
     outroSub: "Bir fikriniz mi var, yoksa sadece merceği mi büküyorsunuz — konuşalım.",
+    contact: {
+      navLabel: "İletişim",
+      title: "Bir proje konuşalım.",
+      subtitle: "Fikrinizi anlatın; 1–2 iş günü içinde size dönelim.",
+      nameLabel: "Ad",
+      namePlaceholder: "Adınız",
+      emailLabel: "E-posta",
+      emailPlaceholder: "siz@ornek.com",
+      messageLabel: "Mesaj",
+      messagePlaceholder: "Aklınızdaki projeden kısaca bahsedin…",
+      submit: "Gönder",
+      successTitle: "E-posta uygulamanız açıldı.",
+      successBody: "Açılmadıysa doğrudan bize yazabilirsiniz:",
+      close: "Kapat",
+      orEmail: "ya da doğrudan:",
+      errRequired: "Bu alan gerekli.",
+      errEmail: "Geçerli bir e-posta girin.",
+      mailSubject: "Yeni proje talebi — reypo",
+    },
+    showreel: {
+      label: "SHOWREEL",
+    },
+    soundOn: "SES AÇIK",
+    soundOff: "SES KAPALI",
   },
   en: {
     kicker: "SOFTWARE × CREATIVE STUDIO",
@@ -104,13 +166,40 @@ export const dictionaries: Record<Lang, Dict> = {
     videoHeading: "The side that records light.",
     videoBody:
       "Motion design, 3D and film production — the creative arm that captures your story frame by frame, reels still turning.",
+    videoTags: ["Motion", "3D", "Film", "Color"],
+    worksTitle: "SELECTED WORKS",
     softwareKicker: "SOFTWARE & SYSTEMS",
     softwareHeading: "The side that turns vision into code.",
     softwareBody:
       "Immersive web, real-time 3D and AI — the engineering arm that ships the idea as a working product, code still flowing.",
+    softwareTags: ["WebGL", "AI", "Realtime", "Cloud"],
     outroKicker: "NEXT FRAME",
     outroHeading: "Let's build something that sees differently.",
     outroSub: "Got an idea, or just bending the lens — either way, let's talk.",
+    contact: {
+      navLabel: "Contact",
+      title: "Let's talk about a project.",
+      subtitle: "Tell us the idea — we'll get back within 1–2 business days.",
+      nameLabel: "Name",
+      namePlaceholder: "Your name",
+      emailLabel: "Email",
+      emailPlaceholder: "you@example.com",
+      messageLabel: "Message",
+      messagePlaceholder: "Briefly describe the project you have in mind…",
+      submit: "Send",
+      successTitle: "Your email app should have opened.",
+      successBody: "If it didn't, you can write to us directly:",
+      close: "Close",
+      orEmail: "or directly:",
+      errRequired: "This field is required.",
+      errEmail: "Enter a valid email.",
+      mailSubject: "New project inquiry — reypo",
+    },
+    showreel: {
+      label: "SHOWREEL",
+    },
+    soundOn: "SOUND ON",
+    soundOff: "SOUND OFF",
   },
 };
 

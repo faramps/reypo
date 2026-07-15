@@ -3,10 +3,12 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { useLanguage } from "@/lib/i18n";
+import { useContact } from "@/lib/contact";
 import { useReducedMotion } from "@/lib/useMediaQuery";
 
 export default function HeroOverlay() {
   const { t } = useLanguage();
+  const { openContact } = useContact();
   const reducedMotion = useReducedMotion();
   const rootRef = useRef<HTMLElement>(null);
 
@@ -54,6 +56,7 @@ export default function HeroOverlay() {
         <div className="hero-reveal mt-8">
           <button
             type="button"
+            onClick={openContact}
             className="pointer-events-auto rounded-full border border-white/15 bg-white/5 px-7 py-3 text-sm font-medium text-white backdrop-blur-md transition-colors hover:border-logo-red/60 hover:bg-white/10"
           >
             {t.cta}

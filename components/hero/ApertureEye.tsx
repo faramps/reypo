@@ -3,9 +3,11 @@
 import { useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { projection } from "@/lib/projection";
 import ApertureBlades from "./ApertureBlades";
 import Pupil from "./Pupil";
 import LensHousing from "./LensHousing";
+import LensGlass from "./LensGlass";
 
 type Props = {
   reducedMotion: boolean;
@@ -27,8 +29,11 @@ export default function ApertureEye({ reducedMotion, highQuality }: Props) {
   useFrame((state, delta) => {
     const g = groupRef.current;
     if (!g) return;
-    const targetRx = reducedMotion ? 0 : -state.pointer.y * tilt;
-    const targetRy = reducedMotion ? 0 : state.pointer.x * tilt;
+    // pointer tilt dies while projecting — the beam must stay glued to the
+    // screen, so the housing can't wander around its own light cone
+    const steady = 1 - projection.fade;
+    const targetRx = reducedMotion ? 0 : -state.pointer.y * tilt * steady;
+    const targetRy = reducedMotion ? 0 : state.pointer.x * tilt * steady;
     g.rotation.x = THREE.MathUtils.damp(g.rotation.x, targetRx, 3, delta);
     g.rotation.y = THREE.MathUtils.damp(g.rotation.y, targetRy, 3, delta);
   });
@@ -60,6 +65,7 @@ export default function ApertureEye({ reducedMotion, highQuality }: Props) {
         highQuality={highQuality}
       />
       <Pupil reducedMotion={reducedMotion} highQuality={highQuality} />
+      <LensGlass />
     </group>
   );
 }

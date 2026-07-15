@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { palette } from "@/lib/palette";
@@ -62,20 +62,36 @@ export default function ApertureBlades({
     return geo;
   }, [highQuality]);
 
-  const bladeMat = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
+  // Clearcoat is one of the most expensive shaders three.js compiles (and runs).
+  // On the low tier we drop to a plain metallic Standard material — it still
+  // reads as red metal under the env map, but compiles far faster and saves the
+  // weakest GPUs a meaningful per-frame cost.
+  const bladeMat = useMemo(() => {
+    if (!highQuality) {
+      return new THREE.MeshStandardMaterial({
         color: new THREE.Color(palette.red),
         metalness: 0.85,
-        roughness: 0.3,
-        clearcoat: 1,
-        clearcoatRoughness: 0.22,
+        roughness: 0.32,
         envMapIntensity: 1.1,
         emissive: new THREE.Color(palette.red),
         emissiveIntensity: 0.02,
-      }),
-    [],
-  );
+      });
+    }
+    return new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(palette.red),
+      metalness: 0.85,
+      roughness: 0.3,
+      clearcoat: 1,
+      clearcoatRoughness: 0.22,
+      envMapIntensity: 1.1,
+      emissive: new THREE.Color(palette.red),
+      emissiveIntensity: 0.02,
+    });
+  }, [highQuality]);
+
+  // Free the GPU resources when the tier flips (PerformanceMonitor) or unmounts.
+  useEffect(() => () => bladeGeo.dispose(), [bladeGeo]);
+  useEffect(() => () => bladeMat.dispose(), [bladeMat]);
 
   useFrame((_, delta) => {
     // scrolling into the experience opens the aperture (lens "focuses in")

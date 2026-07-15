@@ -4,6 +4,8 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { palette } from "@/lib/palette";
+import { scroll } from "@/lib/scrollStore";
+import { band } from "@/lib/projection";
 
 type Props = {
   count: number;
@@ -17,6 +19,8 @@ type Props = {
  */
 export default function DataConstellations({ count, reducedMotion }: Props) {
   const groupRef = useRef<THREE.Group>(null);
+  const dotsMatRef = useRef<THREE.PointsMaterial>(null);
+  const linesMatRef = useRef<THREE.LineBasicMaterial>(null);
 
   const { pointsGeo, linesGeo } = useMemo(() => {
     const positions = new Float32Array(count * 3);
@@ -73,12 +77,19 @@ export default function DataConstellations({ count, reducedMotion }: Props) {
     const py = reducedMotion ? 0 : state.pointer.y * 0.25;
     g.position.x = THREE.MathUtils.damp(g.position.x, px, 2, delta);
     g.position.y = THREE.MathUtils.damp(g.position.y, py, 2, delta);
+
+    // during the works act the field "becomes" the arrow stream (ArrowFlow):
+    // dots + links dim right as the arrows fade in, so it reads as a transform
+    const w = reducedMotion ? 0 : band(scroll.progress, 0.14, 0.28, 0.52, 0.6);
+    if (dotsMatRef.current) dotsMatRef.current.opacity = 1 - 0.85 * w;
+    if (linesMatRef.current) linesMatRef.current.opacity = 0.22 * (1 - w);
   });
 
   return (
     <group ref={groupRef}>
       <points geometry={pointsGeo}>
         <pointsMaterial
+          ref={dotsMatRef}
           size={0.055}
           color={palette.silver}
           transparent
@@ -89,6 +100,7 @@ export default function DataConstellations({ count, reducedMotion }: Props) {
       </points>
       <lineSegments geometry={linesGeo}>
         <lineBasicMaterial
+          ref={linesMatRef}
           color={palette.blueGlow}
           transparent
           opacity={0.22}

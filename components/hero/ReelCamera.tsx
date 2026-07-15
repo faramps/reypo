@@ -6,6 +6,7 @@ import { RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 import { palette } from "@/lib/palette";
 import { scroll } from "@/lib/scrollStore";
+import { softwareProjectionFade } from "@/lib/projection";
 import ApertureEye from "./ApertureEye";
 import Terminal from "./Terminal";
 import FilmStrip from "./FilmStrip";
@@ -100,22 +101,32 @@ function Reel({
 
 /**
  * Stylised old-style reel movie camera (per reference): a boxy body with a lens
- * hood + the detailed aperture as its front lens, two punched film spools on top,
- * a carry handle, viewfinder, crank and REC light — and the live terminal built
- * into the BACK of the body, so camera (video) and terminal (software) are one
- * device. Rotating the rig 180° turns from the lens to the terminal.
+ * hood + the detailed aperture as its front lens, two punched film spools on
+ * top, a carry handle, viewfinder, crank and REC light — and the live terminal
+ * built into the BACK of the body, so camera (video) and terminal (software)
+ * are one device. Lens and body always travel TOGETHER: StageRig flies this
+ * whole group along the projector orbit and the turntable turn.
  *
- * At scroll 0 only the full-size lens shows (hero); scrolling scales the body in
- * while the lens shrinks + moves forward, "zooming out" to reveal the camera.
+ * At scroll 0 only the full-size lens shows (hero); scrolling scales the body
+ * in while the lens shrinks + docks onto its front seat (z=0.95 — StageRig's
+ * SEAT_LOCAL must match), so the combined device is assembled before the beam
+ * ignites.
  */
 export default function ReelCamera({ reducedMotion, highQuality }: Props) {
   const lensRef = useRef<THREE.Group>(null);
   const bodyRef = useRef<THREE.Group>(null);
+  const terminalRef = useRef<THREE.Group>(null);
   const reelSpeed = reducedMotion ? 0 : 1.2;
 
   useFrame((_, delta) => {
     const p = reducedMotion ? 0 : scroll.progress;
-    const reveal = THREE.MathUtils.smoothstep(p, 0.04, 0.28);
+    const reveal = THREE.MathUtils.smoothstep(p, 0.04, 0.26);
+
+    // Hide the built-in terminal once the projected terminal screen takes over
+    // (the device is low + facing away then), so they don't double up.
+    if (terminalRef.current) {
+      terminalRef.current.visible = softwareProjectionFade(p) < 0.35;
+    }
 
     if (lensRef.current) {
       const s = THREE.MathUtils.lerp(1, 0.5, reveal);
@@ -147,7 +158,7 @@ export default function ReelCamera({ reducedMotion, highQuality }: Props) {
 
   return (
     <group>
-      {/* front lens (the hero aperture) */}
+      {/* front lens (the hero aperture — and the projector's light source) */}
       <group ref={lensRef}>
         <ApertureEye reducedMotion={reducedMotion} highQuality={highQuality} />
       </group>
@@ -268,8 +279,14 @@ export default function ReelCamera({ reducedMotion, highQuality }: Props) {
           <meshStandardMaterial color={palette.silverDim} metalness={1} roughness={0.35} />
         </mesh>
 
-        {/* terminal built into the back of the body (software side) */}
-        <group position={[0, -0.2, -2.92]} rotation={[0, Math.PI, 0]} scale={0.52}>
+        {/* terminal built into the back of the body — hidden once the projected
+            terminal screen takes over (see terminalRef toggle above) */}
+        <group
+          ref={terminalRef}
+          position={[0, -0.2, -2.92]}
+          rotation={[0, Math.PI, 0]}
+          scale={0.52}
+        >
           <Terminal reducedMotion={reducedMotion} />
         </group>
       </group>

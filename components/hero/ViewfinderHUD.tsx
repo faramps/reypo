@@ -69,8 +69,8 @@ export default function ViewfinderHUD() {
         <span ref={tcRef}>00:00:00:00</span>
       </div>
 
-      {/* lens readout */}
-      <div className="absolute right-5 top-16 text-right font-mono text-[11px] tracking-widest text-silver/50">
+      {/* lens readout (hidden on mobile to avoid crowding the top bar) */}
+      <div className="absolute right-5 top-16 hidden text-right font-mono text-[11px] tracking-widest text-silver/50 sm:block">
         f/1.4 · 1/48 · ISO 800
       </div>
 
@@ -83,8 +83,9 @@ export default function ViewfinderHUD() {
         <div className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-logo-red" />
       </div>
 
-      {/* chapter readout (right edge) */}
-      <div className="absolute right-5 top-1/2 flex -translate-y-1/2 flex-col items-end gap-3">
+      {/* chapter readout (right edge) — hidden on mobile so it can't collide
+          with the right-aligned panel text / showreel */}
+      <div className="absolute right-5 top-1/2 hidden -translate-y-1/2 flex-col items-end gap-3 sm:flex">
         {CHAPTERS.map((c, i) => (
           <div
             key={c}

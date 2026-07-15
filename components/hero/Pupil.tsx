@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { palette } from "@/lib/palette";
+import { projection } from "@/lib/projection";
 
 type Props = {
   reducedMotion: boolean;
@@ -13,18 +14,23 @@ type Props = {
 /**
  * Logo-blue emissive pupil that tracks the pointer like a watchman's eye,
  * staying centred within the aperture. Sits in front of the blades on z.
+ * During the projection act it doubles as the projector's lamp: it re-centres
+ * on the beam axis and its emissive flares up.
  */
 export default function Pupil({ reducedMotion, highQuality }: Props) {
   const groupRef = useRef<THREE.Group>(null);
+  const lampRef = useRef<THREE.MeshStandardMaterial>(null);
 
   useFrame((state, delta) => {
     const g = groupRef.current;
     if (!g) return;
-    const maxOffset = 0.32;
+    const lamp = projection.fade;
+    const maxOffset = 0.32 * (1 - lamp);
     const tx = reducedMotion ? 0 : state.pointer.x * maxOffset;
     const ty = reducedMotion ? 0 : state.pointer.y * maxOffset;
     g.position.x = THREE.MathUtils.damp(g.position.x, tx, 5, delta);
     g.position.y = THREE.MathUtils.damp(g.position.y, ty, 5, delta);
+    if (lampRef.current) lampRef.current.emissiveIntensity = 1.5 + 2.6 * lamp;
   });
 
   const sphereSeg = highQuality ? 48 : 24;
@@ -32,10 +38,11 @@ export default function Pupil({ reducedMotion, highQuality }: Props) {
 
   return (
     <group ref={groupRef} position={[0, 0, 0.35]}>
-      {/* blue pupil */}
+      {/* blue pupil (the projector's lamp while the beam is on) */}
       <mesh>
         <sphereGeometry args={[0.42, sphereSeg, sphereSeg]} />
         <meshStandardMaterial
+          ref={lampRef}
           color={palette.blue}
           emissive={palette.blueGlow}
           emissiveIntensity={1.5}
