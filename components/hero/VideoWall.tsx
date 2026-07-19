@@ -8,7 +8,9 @@ import { band, clipIndexFor } from "@/lib/projection";
 import { SHOWREEL_CLIPS } from "@/lib/siteConfig";
 
 const PANEL_W = 3.5;
-const PANEL_H = PANEL_W * (9 / 16);
+/** Portrait cards render TALLER than the 16:9 card — a 9:16 cover squeezed to
+    the landscape card's height would read tiny next to the centre screen. */
+const PANEL_PORTRAIT_H = 2.6;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -57,117 +59,90 @@ function createReelPlaceholder(label: string): THREE.CanvasTexture {
 }
 
 /**
- * Cover cache: ONE captured frame per clip src, shared for the page's life,
- * so the gallery can re-arrange covers instantly as the active reel changes.
- * Capture grabs a single frame with a throwaway <video>, composes it onto the
- * panel's 16:9 (non-16:9 clips sit sharp over a blurred cover fill) and then
- * releases the decoder — no live media element survives.
+ * Cover cache: ONE texture per POSTER url, shared for the page's life, so the
+ * gallery can re-arrange covers instantly as the active reel changes. The
+ * texture keeps the poster's OWN aspect — the card shapes itself to the clip
+ * (a 9:16 reel gets a tall phone-format card), so there are never filler
+ * bands around the picture. Loading the pixels as a WebGL texture needs CORS
+ * (crossOrigin), which the R2 custom domain provides; until CORS is live the
+ * image errors and the panel keeps its film-strip placeholder.
  */
 const coverCache = new Map<string, THREE.CanvasTexture>();
 const coverPending = new Set<string>();
 const coverWaiters = new Map<string, Set<(t: THREE.CanvasTexture) => void>>();
 
+function composePoster(img: HTMLImageElement): THREE.CanvasTexture {
+  // canvas takes the poster's aspect (long side 768) — full-bleed, no bands
+  const iw = img.naturalWidth || 16;
+  const ih = img.naturalHeight || 9;
+  const c = document.createElement("canvas");
+  if (iw >= ih) {
+    c.width = 768;
+    c.height = Math.max(1, Math.round((768 * ih) / iw));
+  } else {
+    c.height = 768;
+    c.width = Math.max(1, Math.round((768 * iw) / ih));
+  }
+  const ctx = c.getContext("2d")!;
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
+
 function requestCover(
-  src: string,
+  url: string,
   cb: (t: THREE.CanvasTexture) => void,
 ): () => void {
-  const hit = coverCache.get(src);
+  const hit = coverCache.get(url);
   if (hit) {
     cb(hit);
     return () => {};
   }
-  let waiters = coverWaiters.get(src);
+  let waiters = coverWaiters.get(url);
   if (!waiters) {
     waiters = new Set();
-    coverWaiters.set(src, waiters);
+    coverWaiters.set(url, waiters);
   }
   waiters.add(cb);
 
-  if (!coverPending.has(src)) {
-    coverPending.add(src);
-    const video = document.createElement("video");
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = "metadata";
-    video.src = src;
-
-    const release = () => {
-      video.removeAttribute("src");
-      video.load();
+  if (!coverPending.has(url)) {
+    coverPending.add(url);
+    const img = new Image();
+    img.crossOrigin = "anonymous"; // CORS-approved pixels → usable as a WebGL texture
+    img.decoding = "async";
+    img.onload = () => {
+      const t = composePoster(img);
+      coverCache.set(url, t);
+      coverPending.delete(url);
+      coverWaiters.get(url)?.forEach((f) => f(t));
+      coverWaiters.delete(url);
     };
-    let done = false;
-    const capture = () => {
-      if (done || video.readyState < 2) return;
-      done = true;
-      const c = document.createElement("canvas");
-      c.width = 768;
-      c.height = 432;
-      const ctx = c.getContext("2d")!;
-      const vw = video.videoWidth || 16;
-      const vh = video.videoHeight || 9;
-      const cover = Math.max(c.width / vw, c.height / vh);
-      ctx.filter = "blur(26px) brightness(0.5)";
-      ctx.drawImage(
-        video,
-        (c.width - vw * cover) / 2,
-        (c.height - vh * cover) / 2,
-        vw * cover,
-        vh * cover,
-      );
-      ctx.filter = "none";
-      const fit = Math.min(c.width / vw, c.height / vh);
-      ctx.drawImage(
-        video,
-        (c.width - vw * fit) / 2,
-        (c.height - vh * fit) / 2,
-        vw * fit,
-        vh * fit,
-      );
-      const t = new THREE.CanvasTexture(c);
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.minFilter = THREE.LinearFilter;
-      coverCache.set(src, t);
-      coverPending.delete(src);
-      coverWaiters.get(src)?.forEach((f) => f(t));
-      coverWaiters.delete(src);
-      release();
+    img.onerror = () => {
+      coverPending.delete(url); // a later request may retry (e.g. once CORS is live)
     };
-    const onMeta = () => {
-      // a beat past the start — frame 0 is often black
-      try {
-        video.currentTime = Math.min(1.2, (video.duration || 0) * 0.1 || 0.1);
-      } catch {
-        /* not seekable: capture whatever frame arrives */
-      }
-    };
-    video.addEventListener("loadedmetadata", onMeta);
-    video.addEventListener("seeked", capture);
-    video.addEventListener("loadeddata", capture); // fallback if the seek no-ops
-    video.addEventListener("error", () => {
-      coverPending.delete(src); // a later request may retry
-      release();
-    });
-    video.load();
+    img.src = url;
   }
 
   return () => {
-    coverWaiters.get(src)?.delete(cb);
+    coverWaiters.get(url)?.delete(cb);
   };
 }
 
-function useCover(src?: string): THREE.CanvasTexture | null {
-  // cache hits resolve during render; only misses subscribe for the capture
-  const cached = src ? (coverCache.get(src) ?? null) : null;
+function useCover(url?: string): THREE.CanvasTexture | null {
+  // cache hits resolve during render; only misses subscribe for the load
+  const cached = url ? (coverCache.get(url) ?? null) : null;
   const [loaded, setLoaded] = useState<{
-    src: string;
+    url: string;
     tex: THREE.CanvasTexture;
   } | null>(null);
   useEffect(() => {
-    if (!src || coverCache.has(src)) return;
-    return requestCover(src, (tex) => setLoaded({ src, tex }));
-  }, [src]);
+    if (!url || coverCache.has(url)) return;
+    return requestCover(url, (tex) => setLoaded({ url, tex }));
+  }, [url]);
   // shared page-lifetime cache — never disposed here
-  return cached ?? (loaded && loaded.src === src ? loaded.tex : null);
+  return cached ?? (loaded && loaded.url === url ? loaded.tex : null);
 }
 
 /** One angled gallery panel showing the cover of reel `clipIdx` (or hidden). */
@@ -181,9 +156,17 @@ function WallPanel({ side, clipIdx }: { side: -1 | 1; clipIdx: number }) {
   const has = clipIdx >= 0;
   const clip = has ? SHOWREEL_CLIPS[clipIdx] : undefined;
   const label = has ? `REEL ${pad2(clipIdx + 1)}` : "REEL --";
-  const cover = useCover(clip?.src || undefined);
+  const cover = useCover(clip?.poster || undefined);
   const placeholder = useMemo(() => createReelPlaceholder(label), [label]);
   useEffect(() => () => placeholder.dispose(), [placeholder]);
+  const tex = cover ?? placeholder;
+
+  // the card takes the cover's shape: landscape keeps the classic 16:9 card;
+  // portrait reels get a tall phone-format card (no filler bands to hide)
+  const texImg = tex.image as { width: number; height: number } | undefined;
+  const a = texImg && texImg.height ? texImg.width / texImg.height : 16 / 9;
+  const pw = a >= 1 ? PANEL_W : PANEL_PORTRAIT_H * a;
+  const ph = a >= 1 ? PANEL_W / a : PANEL_PORTRAIT_H;
 
   useFrame((_, delta) => {
     const g = groupRef.current;
@@ -202,8 +185,12 @@ function WallPanel({ side, clipIdx }: { side: -1 | 1; clipIdx: number }) {
     s.t = Math.min(s.t + delta, 9);
     const settle = 1 - Math.exp(-s.t * 7); // 0 → 1 over ~0.4s
 
-    // slide in from the side while fading
-    const x = side * THREE.MathUtils.lerp(6.4, 4.9, Math.min(1, w * 1.4));
+    // slide in from the side while fading; narrower (portrait) cards shift
+    // inward so every card's INNER edge lands where the 16:9 card's does
+    const x =
+      side *
+      (THREE.MathUtils.lerp(6.4, 4.9, Math.min(1, w * 1.4)) -
+        (PANEL_W - pw) / 2);
     g.position.x = THREE.MathUtils.damp(g.position.x, x, 6, delta);
     // covers sit dimmer than the live centre screen; dip on swap
     if (picRef.current) picRef.current.opacity = 0.85 * w * (0.25 + 0.75 * settle);
@@ -217,8 +204,8 @@ function WallPanel({ side, clipIdx }: { side: -1 | 1; clipIdx: number }) {
       position={[side * 6.4, 0.35, -1.2]}
       rotation={[0, -side * 0.42, 0]}
     >
-      <mesh position={[0, 0, -0.03]}>
-        <planeGeometry args={[PANEL_W + 0.22, PANEL_H + 0.22]} />
+      <mesh position={[0, 0, -0.03]} scale={[pw + 0.22, ph + 0.22, 1]}>
+        <planeGeometry args={[1, 1]} />
         <meshStandardMaterial
           ref={frameRef}
           color="#0b0e15"
@@ -229,11 +216,11 @@ function WallPanel({ side, clipIdx }: { side: -1 | 1; clipIdx: number }) {
           fog={false}
         />
       </mesh>
-      <mesh>
-        <planeGeometry args={[PANEL_W, PANEL_H]} />
+      <mesh scale={[pw, ph, 1]}>
+        <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
           ref={picRef}
-          map={cover ?? placeholder}
+          map={tex}
           transparent
           opacity={0}
           toneMapped={false}
@@ -248,7 +235,7 @@ function WallPanel({ side, clipIdx }: { side: -1 | 1; clipIdx: number }) {
  * The GALLERY around the centre screen: while reel N plays, its neighbours'
  * covers flank it — previous on the left, next on the right (wrapping, so the
  * wall always reads as "more work either side"). The covers never play; the
- * centre screen is the only live video. Covers come from the shared one-frame
+ * centre screen is the only live video. Covers come from the shared poster
  * cache, pre-warmed here so stepping reels re-arranges them instantly.
  */
 export default function VideoWall() {
@@ -256,25 +243,13 @@ export default function VideoWall() {
   const activeRef = useRef(0);
   const [active, setActive] = useState(0);
 
-  // pre-warm every cover once (sequentially — one throwaway decoder at a time)
+  // pre-warm every poster cover once, so stepping reels re-arranges them
+  // instantly (posters are light — a few parallel image loads is fine)
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      for (const c of SHOWREEL_CLIPS) {
-        if (cancelled || !c.src) continue;
-        await new Promise<void>((resolve) => {
-          const un = requestCover(c.src, () => resolve());
-          // guard: if the file errors the waiters never fire — don't hang
-          setTimeout(() => {
-            un();
-            resolve();
-          }, 15000);
-        });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    const uns = SHOWREEL_CLIPS.map((c) =>
+      c.poster ? requestCover(c.poster, () => {}) : () => {},
+    );
+    return () => uns.forEach((un) => un());
   }, []);
 
   useFrame(() => {

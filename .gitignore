@@ -46,3 +46,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# HLS encode çıktısı (R2'ye yüklenir, repoya girmez)
+/hls-out/
+
+# Yerel medya testi (symlink → hls-out); prod R2 kullanır
+/public/media-local

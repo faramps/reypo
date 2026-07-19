@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Hls from "hls.js";
 import { useLanguage } from "@/lib/i18n";
 import { scroll } from "@/lib/scrollStore";
 import { videoFade, clipIndexFor } from "@/lib/projection";
@@ -14,12 +15,21 @@ const multi = clips.length > 1;
 /** Crossfade length between reels (covers the CSS transition on the slots). */
 const XFADE_S = 0.75;
 
-/** Fixed screen height — the classic 16:9 frame's height (58vw wide capped at
-    1080px). The WIDTH follows each clip's aspect ratio around this height. */
+/** Screen height per clip shape. Landscape keeps the classic 16:9 frame's
+    height (58vw wide capped at 1080px). PORTRAIT reels render moderately
+    taller — at the landscape height a 9:16 frame reads too small — and the
+    WIDTH follows each clip's aspect ratio around this height, so portrait
+    grows in both dimensions proportionally. The growth happens DOWNWARD: the
+    portrait frame recentres slightly lower (screenTop) so its TOP edge never
+    rises past the landscape frame's — the 3D works title docks just above
+    that line (WorksTitle: ~17% of the viewport) and must stay readable. */
 const SCREEN_H = "min(32.625vw, 607.5px)";
+const SCREEN_H_PORTRAIT = "min(38vw, 70vh, 720px)";
+const screenHeight = (a: number) => (a < 1 ? SCREEN_H_PORTRAIT : SCREEN_H);
+const screenTop = (a: number) => (a < 1 ? "54%" : "46%");
 /** Frame width for an aspect ratio (capped so ultra-wide can't overflow). */
 const screenWidth = (a: number) =>
-  `min(calc(${SCREEN_H} * ${a.toFixed(4)}), 92vw)`;
+  `min(calc(${screenHeight(a)} * ${a.toFixed(4)}), 92vw)`;
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -71,6 +81,8 @@ export default function ProjectionOverlay() {
   const vidRefs = useRef<(HTMLVideoElement | null)[]>([null, null]);
   const tickRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const labelRef = useRef<HTMLSpanElement>(null);
+  // reel-counter row under the screen — follows the frame's (variable) height
+  const counterRef = useRef<HTMLDivElement>(null);
   // sound: the reels play WITH audio. Browsers refuse un-muted autoplay until
   // the user has interacted once — then the first pointer/key unmutes it.
   const soundOnRef = useRef(true); // user intent (the toggle button)
@@ -107,6 +119,35 @@ export default function ProjectionOverlay() {
     // per-frame reconcile below immediately issues a fresh one.
     const pendingSince: [number, number] = [0, 0];
     const PLAY_WEDGE_MS = 3000;
+
+    // HLS: whenever MSE is available, playback goes through hls.js — even on
+    // browsers whose canPlayType claims native HLS ("maybe"): Chrome 148+ says
+    // so yet stalls at readyState 0 with a raw .m3u8 src. Native <video src>
+    // HLS is only for MSE-less browsers (iOS Safari, where Hls.isSupported()
+    // is false); everything else without MSE gets the progressive mp4.
+    const hlsSlots: (Hls | null)[] = [null, null];
+    // which src each slot's hls.js instance has actually loadSource()d. Kept
+    // HERE (not on the DOM element): dataset.src survives an effect re-run
+    // (StrictMode/HMR) while the hls instance does not — comparing against the
+    // element would skip loadSource on the fresh instance and play nothing.
+    const hlsSrc: (string | null)[] = [null, null];
+    // the reel each slot currently points at — the per-slot hls.js ERROR handler
+    // is registered ONCE but the instance is reused across reels, so on failure
+    // it must fall back to the CURRENT reel's mp4, not the one that created it
+    const slotClip: ((typeof clips)[number] | null)[] = [null, null];
+    const canNativeHls = (v: HTMLVideoElement) =>
+      v.canPlayType("application/vnd.apple.mpegurl") !== "";
+    // Re-fetch a wedged slot WITHOUT detaching MSE: hls.js re-pulls via
+    // startLoad(); a plain element re-pulls via load(). (A raw load() on an
+    // hls.js-attached element tears down its MediaSource and kills the reel.)
+    const reloadSlot = (slot: 0 | 1) => {
+      const v = vidRefs.current[slot];
+      if (!v) return;
+      const hls = hlsSlots[slot];
+      if (hls) hls.startLoad();
+      else v.load();
+    };
+
     const setPlay = (slot: 0 | 1, on: boolean) => {
       const v = vidRefs.current[slot];
       if (!v || on === !v.paused) return; // already in the requested state
@@ -114,7 +155,7 @@ export default function ProjectionOverlay() {
         if (pendingSince[slot]) {
           if (performance.now() - pendingSince[slot] > PLAY_WEDGE_MS) {
             pendingSince[slot] = 0;
-            v.load(); // aborts the wedged play(); retried next frame from 0
+            reloadSlot(slot); // aborts the wedged play(); retried next frame from 0
           }
           return;
         }
@@ -155,21 +196,18 @@ export default function ProjectionOverlay() {
     window.addEventListener("pointerdown", unlockSound);
     window.addEventListener("keydown", unlockSound);
 
-    /** Point a slot at a reel — every reel always starts from its top. */
-    const assign = (slot: 0 | 1, clipIdx: number) => {
-      const v = vidRefs.current[slot];
-      if (!v) return;
-      const src = clips[clipIdx]?.src ?? "";
-      // fetch + decode the first frame WITHOUT playing — the incoming reel
-      // dissolves in as a freeze-frame and only starts rolling at handoff
-      v.preload = "auto";
-      if (v.dataset.src !== src) {
-        v.dataset.src = src;
-        v.src = src;
-        v.load();
-      } else if (v.readyState >= 1 && v.currentTime > 0.05) {
-        // rewind — skipped when already at the top, so rapid up/down never
-        // piles up redundant seeks (each one wedges the element briefly)
+    /**
+     * Point a slot at a reel — every reel always starts from its top. Prefers
+     * the adaptive HLS master; a browser without MSE/native-HLS (or a playlist
+     * that 404s / errors before the HLS files are uploaded) falls back to the
+     * progressive mp4, so the reel always plays. Loads + decodes frame 0 WITHOUT
+     * playing — the incoming reel dissolves in as a freeze-frame, then rolls at
+     * handoff.
+     */
+    const rewindIfNeeded = (v: HTMLVideoElement) => {
+      if (v.readyState >= 1 && v.currentTime > 0.05) {
+        // skipped when already at the top, so rapid up/down never piles up
+        // redundant seeks (each one wedges the element briefly)
         try {
           v.currentTime = 0;
         } catch {
@@ -177,17 +215,82 @@ export default function ProjectionOverlay() {
         }
       }
     };
+    const assign = (slot: 0 | 1, clipIdx: number) => {
+      const v = vidRefs.current[slot];
+      const c = clips[clipIdx];
+      if (!v || !c) return;
+      v.preload = "auto";
+      slotClip[slot] = c;
 
-    /** Reshape the frame to a clip's aspect; morphs while the act is visible. */
+      // MSE path (Chrome/Firefox/Edge/Android): drive the .m3u8 through hls.js
+      if (c.src.endsWith(".m3u8") && Hls.isSupported()) {
+        let hls = hlsSlots[slot];
+        if (!hls) {
+          hls = new Hls({
+            capLevelToPlayerSize: true, // never fetch a rendition bigger than the screen
+            maxBufferLength: 20,
+            startLevel: -1, // let ABR pick the opening rendition from bandwidth
+          });
+          hls.attachMedia(v);
+          hls.on(Hls.Events.ERROR, (_evt, data) => {
+            // a FATAL error (e.g. the playlist is missing because HLS hasn't
+            // been uploaded yet) retires hls.js on this slot and plays the
+            // CURRENT reel's progressive mp4 instead — the reel never goes dark
+            if (!data.fatal) return;
+            const mp4 = slotClip[slot]?.mp4;
+            hls?.destroy();
+            hlsSlots[slot] = null;
+            hlsSrc[slot] = null;
+            if (!mp4) return;
+            v.dataset.src = mp4;
+            v.src = mp4;
+            v.load();
+          });
+          hlsSlots[slot] = hls;
+          hlsSrc[slot] = null; // fresh instance has loaded nothing yet
+        }
+        if (hlsSrc[slot] !== c.src) {
+          hlsSrc[slot] = c.src;
+          v.dataset.src = c.src;
+          hls.loadSource(c.src);
+        } else {
+          rewindIfNeeded(v);
+        }
+        return;
+      }
+
+      // No MSE: iOS Safari plays the .m3u8 natively; anything else (and any
+      // non-HLS src) plays the progressive mp4.
+      const url = c.src.endsWith(".m3u8") && canNativeHls(v) ? c.src : c.mp4;
+      if (v.dataset.src !== url) {
+        v.dataset.src = url;
+        v.src = url;
+        v.load();
+      } else {
+        rewindIfNeeded(v);
+      }
+    };
+
+    /** Reshape the frame to a clip's aspect; morphs while the act is visible.
+        Portrait clips use the taller frame, so BOTH dimensions animate — and
+        the reel-counter row rides the bottom edge down in sync. */
     let curAspect = 16 / 9;
+    const EASE = "650ms cubic-bezier(0.4, 0, 0.2, 1)";
     const setAspect = (a: number, animate: boolean) => {
       const el = screenRef.current;
       if (!el || !(a > 0.1) || Math.abs(a - curAspect) < 0.01) return;
       curAspect = a;
       el.style.transition = animate
-        ? "width 650ms cubic-bezier(0.4, 0, 0.2, 1)"
+        ? `width ${EASE}, height ${EASE}, top ${EASE}`
         : "none";
+      el.style.height = screenHeight(a);
       el.style.width = screenWidth(a);
+      el.style.top = screenTop(a);
+      const row = counterRef.current;
+      if (row) {
+        row.style.transition = animate ? `top ${EASE}` : "none";
+        row.style.top = `calc(${screenTop(a)} + ${screenHeight(a)} / 2 + 20px)`;
+      }
     };
 
     let wasActive = false;
@@ -282,7 +385,7 @@ export default function ProjectionOverlay() {
           deck.stalls++;
           if (backV && deck.stalls >= 2) {
             deck.stalls = 0;
-            backV.load();
+            reloadSlot(backSlot);
           }
           deck.phase = "idle";
           deck.phaseT = 0;
@@ -379,12 +482,16 @@ export default function ProjectionOverlay() {
 
       raf = requestAnimationFrame(loop);
     };
+    // Prime slot 0 with reel 0 (the JSX no longer sets a raw src, so hls.js can
+    // own the element from the first load instead of racing a native fetch).
+    assign(0, 0);
     raf = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("pointerdown", unlockSound);
       window.removeEventListener("keydown", unlockSound);
+      hlsSlots.forEach((h) => h?.destroy());
       vids.forEach((v) => v?.pause());
     };
   }, []);
@@ -436,8 +543,8 @@ export default function ProjectionOverlay() {
                 vidRefs.current[slot] = el;
               }}
               className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-700 ease-in-out"
-              src={slot === 0 ? clips[0].src : undefined}
-              data-src={slot === 0 ? clips[0].src : undefined}
+              // src is set imperatively by assign()/hls.js (a raw .m3u8 src here
+              // would make Chrome error before hls.js can attach)
               poster={slot === 0 ? clips[0].poster : undefined}
               muted
               loop
@@ -452,9 +559,15 @@ export default function ProjectionOverlay() {
         <div className="absolute inset-0 bg-[radial-gradient(24%_32%_at_50%_50%,rgba(215,230,255,0.13),transparent_100%)]" />
       </div>
 
-      {/* reel counter + sound toggle — just under the screen */}
+      {/* reel counter + sound toggle — just under the screen. Centred with
+          inset-x-0 + justify-center (not translateX(-50%)): a -50% translate
+          lands the row on fractional pixels and smears the tiny mono text,
+          1px border and ticks — untransformed flow text rasterizes crisp. */}
       {hasVideo && (
-        <div className="absolute left-1/2 top-[calc(46%_+_min(16.4vw,306px)_+_20px)] flex -translate-x-1/2 items-center gap-4 font-mono text-[10px] tracking-[0.3em] text-silver/60">
+        <div
+          ref={counterRef}
+          className="absolute inset-x-0 top-[calc(46%_+_min(16.4vw,306px)_+_20px)] flex items-center justify-center gap-4 font-mono text-[11px] tracking-[0.25em] text-silver/70"
+        >
           {multi && (
             <>
               <div className="flex items-center gap-1.5">
@@ -465,7 +578,7 @@ export default function ProjectionOverlay() {
                       tickRefs.current[i] = el;
                     }}
                     data-active={i === 0 ? "1" : "0"}
-                    className="h-[3px] w-6 rounded-full bg-white/15 transition-all duration-300 data-[active=1]:bg-logo-red"
+                    className="h-1 w-6 rounded-full bg-white/20 transition-all duration-300 data-[active=1]:bg-logo-red"
                   />
                 ))}
               </div>
@@ -476,7 +589,7 @@ export default function ProjectionOverlay() {
             type="button"
             tabIndex={-1}
             onClick={toggleSound}
-            className="pointer-events-auto rounded-full border border-white/15 bg-white/5 px-3 py-1 font-mono text-[10px] tracking-[0.25em] text-silver/70 backdrop-blur-sm transition-colors hover:text-white"
+            className="pointer-events-auto rounded-full border border-white/25 bg-white/[0.07] px-3.5 py-1 font-mono text-[11px] tracking-[0.22em] text-silver/80 backdrop-blur-sm transition-colors hover:text-white"
           >
             {soundUI ? t.soundOn : t.soundOff}
           </button>

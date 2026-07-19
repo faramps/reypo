@@ -28,32 +28,52 @@ export const CONTACT_EMAIL = "merhaba@reypo.com";
  * angled side panels flanking it.
  *
  * Mixed aspect ratios are fine: the centre screen automatically reshapes to
- * each clip (a 9:16 vertical reel gets a tall portrait frame, morphing during
- * the crossfade), and the side-panel stills letterbox over a blurred fill.
+ * each clip (a 9:16 vertical reel gets a tall portrait frame — rendered larger
+ * than a landscape one — morphing during the crossfade), and the side-panel
+ * cards take each clip's own shape (no filler bands).
  *
  * Set the array to `[]` (or a clip's `src` to "") to force the placeholder.
  * Use ASCII file names (no Turkish characters) so URLs survive every host.
  */
 export type ShowreelClip = {
+  /**
+   * Primary source: the clip's HLS master playlist (.m3u8). Adaptive bitrate —
+   * slow/mobile connections get a lower rendition and start faster. Played via
+   * hls.js (Chrome/Firefox/Android) or natively (Safari). ProjectionOverlay
+   * falls back to `mp4` if the playlist is missing or errors, so the site keeps
+   * working before the HLS files are encoded/uploaded.
+   */
   src: string;
+  /** Progressive MP4 fallback (reduced-motion DOM reel + no-MSE browsers). */
+  mp4: string;
   poster?: string;
 };
 
 // Videolar bir CDN'de (R2) barındırılır. Yerelde env boşsa public/videos/web
-// kullanılır; yayında Vercel'e NEXT_PUBLIC_MEDIA_BASE_URL gir (ör. R2 public
-// URL'si veya media.reypo.com gibi custom domain). Dosya adları iki yerde de aynı.
+// kullanılır. Yayında NEXT_PUBLIC_MEDIA_BASE_URL bir CUSTOM DOMAIN olmalı
+// (ör. https://media.reypo.com) — Cloudflare CORS politikası yalnızca custom
+// domain'de uygulanır; pub-*.r2.dev URL'i CORS döndürmez, o yüzden HLS (hls.js
+// fetch) ve WebGL kapakları r2.dev üzerinde çalışmaz. Dosya adları R2'de de aynı.
 const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? "/videos/web").replace(/\/+$/, "");
 
+// R2 düzeni:  <ad>.mp4  <ad>.jpg  (kök)   ve   hls/<ad>/master.m3u8
+const clip = (name: string): ShowreelClip => ({
+  src: `${MEDIA_BASE}/hls/${name}/master.m3u8`,
+  mp4: `${MEDIA_BASE}/${name}.mp4`,
+  poster: `${MEDIA_BASE}/${name}.jpg`,
+});
+
 export const SHOWREEL_CLIPS: ShowreelClip[] = [
-  { src: `${MEDIA_BASE}/kocaeli.mp4`, poster: `${MEDIA_BASE}/kocaeli.jpg` },
-  { src: `${MEDIA_BASE}/kizilay-camlik.mp4`, poster: `${MEDIA_BASE}/kizilay-camlik.jpg` }, // dikey 9:16
-  { src: `${MEDIA_BASE}/musiad.mp4`, poster: `${MEDIA_BASE}/musiad.jpg` },
-  { src: `${MEDIA_BASE}/vinc.mp4`, poster: `${MEDIA_BASE}/vinc.jpg` }, // dikey 9:16
+  clip("kocaeli"),
+  clip("kizilay-camlik"), // dikey 9:16
+  clip("musiad"),
+  clip("vinc"), // dikey 9:16
 ];
 
 /**
  * Single-source accessors kept for the reduced-motion DOM fallback
- * (components/hero/Showreel.tsx), which shows just the first clip.
+ * (components/hero/Showreel.tsx), which shows just the first clip. It uses the
+ * progressive MP4 (a plain <video src>) — no hls.js on the reduced-motion path.
  */
-export const SHOWREEL_SRC: string = SHOWREEL_CLIPS[0]?.src ?? "";
+export const SHOWREEL_SRC: string = SHOWREEL_CLIPS[0]?.mp4 ?? "";
 export const SHOWREEL_POSTER: string = SHOWREEL_CLIPS[0]?.poster ?? "";
