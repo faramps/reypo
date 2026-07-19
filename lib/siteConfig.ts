@@ -10,7 +10,7 @@
  * change the `submit` handler in components/hero/ContactModal.tsx to POST the
  * form instead; everything else can stay.
  */
-export const CONTACT_EMAIL = "merhaba@reypo.com";
+export const CONTACT_EMAIL = "destek@reypo.com.tr";
 
 /**
  * Showreel clips projected during the creative/video act.
@@ -54,7 +54,10 @@ export type ShowreelClip = {
 // (ör. https://media.reypo.com) — Cloudflare CORS politikası yalnızca custom
 // domain'de uygulanır; pub-*.r2.dev URL'i CORS döndürmez, o yüzden HLS (hls.js
 // fetch) ve WebGL kapakları r2.dev üzerinde çalışmaz. Dosya adları R2'de de aynı.
-const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? "/videos/web").replace(/\/+$/, "");
+// `||` (not `??`): boş string ("NEXT_PUBLIC_MEDIA_BASE_URL=") de yerel yola
+// düşmeli — `??` yalnızca null/undefined'ı yakalar, boş string'i olduğu gibi
+// bırakıp yolları site köküne (/kocaeli.mp4) kaydırırdı.
+const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL || "/videos/web").replace(/\/+$/, "");
 
 // R2 düzeni:  <ad>.mp4  <ad>.jpg  (kök)   ve   hls/<ad>/master.m3u8
 const clip = (name: string): ShowreelClip => ({

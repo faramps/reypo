@@ -48,11 +48,20 @@ export const PROJ = {
   videoIn1: 0.34,
   videoOut0: 0.52,
   videoOut1: 0.6,
-  /** Terminal projection fade — device settled as the front projector. */
+  /** Terminal projection fade — device settled as the front projector. It now
+      clears EARLY in the software→contact transition (by 0.86) so the terminal
+      screen is gone before the device breaks pose and sweeps away (it's glued to
+      the lens axis and would otherwise drag across the frame). */
   softIn0: 0.62,
   softIn1: 0.78,
-  softOut0: 0.9,
-  softOut1: 0.96,
+  softOut0: 0.82,
+  softOut1: 0.86,
+  /** Contact/outro leg: the device leaves the front-projector pose and sweeps
+      back around the orbit to hang DEEP behind the centre, lens turned to the
+      viewer — a far, quiet echo of the hero pose. Starts once the terminal has
+      cleared; finishes at the outro snap (0.97). */
+  contactStart: 0.865,
+  contactEnd: 0.97,
   /** Device drops + shrinks into the projector pose across the transition. */
   dropStart: 0.5,
   dropEnd: 0.78,
@@ -121,6 +130,18 @@ export const SOFT_SCALE = 0.62;
 /** The volumetric beam is shorter for the software throw (projector→screen is
     much nearer than the video throw toward the viewer). */
 export const SOFT_BEAM_SCALE = 0.52;
+
+/**
+ * Contact-pose overrides applied over the final leg (PROJ.contactStart→End).
+ * The device sweeps back behind the centre (φ → 0, lens toward the viewer),
+ * un-drops from the low projector pose, then hangs behind the centre facing the
+ * user — a quiet echo of the hero pose. CONTACT_PULL draws it FORWARD from the
+ * deep orbit vertex (z=-7.5) toward the viewer; keep it below ~5 so the device
+ * stays behind the orbit centre (z=-2), or the lens would turn away.
+ */
+export const CONTACT_PULL = 4.5; // units pulled toward the viewer from the -7.5 vertex → z≈-3
+export const CONTACT_LIFT = 0.3; // lifts it back toward centre height as it rises
+export const CONTACT_SCALE = 0.55; // smaller than SOFT_SCALE → reads farther away
 /** Distance (world units) along the lens axis where the beam lands — the
     terminal screen is pinned there so the beam always meets it. */
 export const SOFT_THROW = 5.4;

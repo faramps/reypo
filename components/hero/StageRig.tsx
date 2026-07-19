@@ -16,6 +16,9 @@ import {
   SOFT_DROP,
   SOFT_SCALE,
   SOFT_BEAM_SCALE,
+  CONTACT_PULL,
+  CONTACT_LIFT,
+  CONTACT_SCALE,
   projection,
   videoFade,
   softwareProjectionFade,
@@ -97,12 +100,17 @@ export default function StageRig({ reducedMotion, highQuality, worksTitle }: Pro
     // instead of a continuous sweep you can stop in the middle of.
     const toBehind = THREE.MathUtils.smoothstep(p, PROJ.enterStart, PROJ.enterEnd);
     const toFront = THREE.MathUtils.smoothstep(p, PROJ.transStart, PROJ.transEnd);
+    // final leg (contact/outro): sweep the device back around to behind the
+    // centre, where the tidal lock turns the lens toward the viewer again.
+    const toContact = THREE.MathUtils.smoothstep(p, PROJ.contactStart, PROJ.contactEnd);
     const enter = toBehind; // hero-pose → orbit blend tracks the first leg
     let phi = THREE.MathUtils.lerp(PHI_START, 0, toBehind);
     phi = THREE.MathUtils.lerp(phi, PHI_END, toFront);
+    phi = THREE.MathUtils.lerp(phi, 0, toContact); // …then back around to behind (φ→0)
     const s = Math.sin(phi);
     const c = Math.cos(phi);
-    const drop = SOFT_DROP * settle;
+    // un-drop as the device rises out of the low projector pose for the sweep
+    const drop = SOFT_DROP * settle * (1 - toContact);
 
     // on-orbit position around the centre (φ=0 is behind, φ=±π is front)
     orbitPos.set(
@@ -122,6 +130,13 @@ export default function StageRig({ reducedMotion, highQuality, worksTitle }: Pro
     vTarget.x += ORBIT_RX * 0.8 * sweep;
     vTarget.y += ORBIT_TILT * 1.7 * sweep;
     vTarget.z -= 1.6 * sweep;
+
+    // contact leg: draw the device FORWARD from the deep orbit vertex toward the
+    // viewer (still behind the centre) and lift back toward centre height.
+    // Applied BEFORE the look-at below so the tidal aim is taken from this spot
+    // (staying behind the centre keeps the lens resolving to face the viewer).
+    vTarget.z += CONTACT_PULL * toContact;
+    vTarget.y += CONTACT_LIFT * toContact;
 
     // ---- orientation: lock the lens onto the centre from the device's ACTUAL
     // (swept) position, and turn there QUICKLY out of the hero's face-the-viewer
@@ -170,7 +185,11 @@ export default function StageRig({ reducedMotion, highQuality, worksTitle }: Pro
     // shrink into an elegant small projector as it settles
     const scl = THREE.MathUtils.damp(
       rig.scale.x,
-      THREE.MathUtils.lerp(1, SOFT_SCALE, settle) * (1 - 0.45 * parked),
+      THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(1, SOFT_SCALE, settle) * (1 - 0.45 * parked),
+        CONTACT_SCALE,
+        toContact,
+      ),
       6,
       delta,
     );

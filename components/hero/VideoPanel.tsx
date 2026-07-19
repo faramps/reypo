@@ -16,11 +16,15 @@ export default function VideoPanel() {
         <p className="text-xs font-medium uppercase tracking-[0.32em] text-logo-red/80">
           {t.videoKicker}
         </p>
-        <h2 className="mt-4 text-3xl font-semibold leading-[1.1] tracking-tight text-white sm:text-5xl">
+        <h2 className="mt-3 text-2xl font-semibold leading-[1.1] tracking-tight text-white sm:mt-4 sm:text-5xl">
           {t.videoHeading}
         </h2>
-        <p className="mt-5 text-base leading-7 text-silver/75">{t.videoBody}</p>
-        <ul className="mt-7 flex flex-wrap gap-2">
+        {/* descriptive copy hidden on phones — the stacked video + counter +
+            caption already fill the viewport there, so it would collide */}
+        <p className="mt-5 hidden text-base leading-7 text-silver/75 sm:block">
+          {t.videoBody}
+        </p>
+        <ul className="mt-4 flex flex-wrap gap-2 sm:mt-7">
           {t.videoTags.map((tag) => (
             <li
               key={tag}

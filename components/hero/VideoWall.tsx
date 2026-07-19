@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { scroll } from "@/lib/scrollStore";
 import { band, clipIndexFor } from "@/lib/projection";
@@ -10,7 +10,7 @@ import { SHOWREEL_CLIPS } from "@/lib/siteConfig";
 const PANEL_W = 3.5;
 /** Portrait cards render TALLER than the 16:9 card — a 9:16 cover squeezed to
     the landscape card's height would read tiny next to the centre screen. */
-const PANEL_PORTRAIT_H = 2.6;
+const PANEL_PORTRAIT_H = 3.0;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -239,6 +239,9 @@ function WallPanel({ side, clipIdx }: { side: -1 | 1; clipIdx: number }) {
  * cache, pre-warmed here so stepping reels re-arranges them instantly.
  */
 export default function VideoWall() {
+  // Narrow (phone) viewports can't fit the angled side covers — they only clip
+  // in at the screen edges — so the gallery is a wide-screen flourish only.
+  const mobile = useThree((s) => s.size.width) < 768;
   const n = SHOWREEL_CLIPS.length;
   const activeRef = useRef(0);
   const [active, setActive] = useState(0);
@@ -262,6 +265,8 @@ export default function VideoWall() {
 
   const left = n >= 2 ? (active - 1 + n) % n : -1;
   const right = n >= 3 ? (active + 1) % n : -1;
+
+  if (mobile) return null;
 
   return (
     <>

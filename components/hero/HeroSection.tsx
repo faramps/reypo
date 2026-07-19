@@ -82,8 +82,8 @@ export default function HeroSection() {
       // panels align with the dwell zones (see PROJ): hero → video → software → outro
       setPanel(heroRef.current, 1 - ramp(p, 0.02, 0.12));
       setPanel(videoRef.current, band(p, 0.08, 0.22, 0.52, 0.6));
-      setPanel(softRef.current, band(p, 0.62, 0.76, 0.88, 0.94));
-      setPanel(outroRef.current, ramp(p, 0.92, 0.97));
+      setPanel(softRef.current, band(p, 0.62, 0.76, 0.82, 0.86));
+      setPanel(outroRef.current, ramp(p, 0.88, 0.965));
     };
 
     const ctx = gsap.context(() => {

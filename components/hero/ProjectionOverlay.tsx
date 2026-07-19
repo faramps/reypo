@@ -23,10 +23,21 @@ const XFADE_S = 0.75;
     portrait frame recentres slightly lower (screenTop) so its TOP edge never
     rises past the landscape frame's — the 3D works title docks just above
     that line (WorksTitle: ~17% of the viewport) and must stay readable. */
-const SCREEN_H = "min(32.625vw, 607.5px)";
-const SCREEN_H_PORTRAIT = "min(38vw, 70vh, 720px)";
-const screenHeight = (a: number) => (a < 1 ? SCREEN_H_PORTRAIT : SCREEN_H);
-const screenTop = (a: number) => (a < 1 ? "54%" : "46%");
+// Landscape frame height: proportional to viewport width, capped at 607.5px on
+// wide screens. A phone would otherwise get a tiny frame, so a 200px floor kicks
+// in below ~613px width — enlarging landscape reels to ≈90vw on phones while
+// leaving tablet/laptop/desktop (where 32.625vw already exceeds 200px) untouched.
+const SCREEN_H = "min(607.5px, max(32.625vw, 200px))";
+// Portrait frame: height-led on wide screens (74vh, capped 812px). On a narrow
+// PHONE that alone left it tied to a tiny vw, so we also cap the WIDTH at ~56vw
+// (written as height = 56vw / aspect) — that enlarges the phone frame to a
+// proportionate size while leaving desktop (still 74vh-limited) unchanged.
+const screenHeight = (a: number) =>
+  a < 1 ? `min(74vh, 812px, calc(56vw / ${a.toFixed(4)}))` : SCREEN_H;
+// portrait rides higher than the landscape centre so the taller 9:16 frame sits
+// up near the works title (top edge ~14% of the viewport) — nudge this down if
+// the frame ever starts covering the title, or raise the title (WorksTitle) too
+const screenTop = (a: number) => (a < 1 ? "51%" : "46%");
 /** Frame width for an aspect ratio (capped so ultra-wide can't overflow). */
 const screenWidth = (a: number) =>
   `min(calc(${screenHeight(a)} * ${a.toFixed(4)}), 92vw)`;

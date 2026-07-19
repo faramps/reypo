@@ -10,13 +10,14 @@ export default function SoftwarePanel() {
         <p className="text-xs font-medium uppercase tracking-[0.32em] text-logo-blue/90">
           {t.softwareKicker}
         </p>
-        <h2 className="mt-4 text-3xl font-semibold leading-[1.1] tracking-tight text-white sm:text-5xl">
+        <h2 className="mt-3 text-2xl font-semibold leading-[1.1] tracking-tight text-white sm:mt-4 sm:text-5xl">
           {t.softwareHeading}
         </h2>
-        <p className="mt-5 text-base leading-7 text-silver/75">
+        {/* descriptive copy hidden on phones — it would overlap the 3D terminal */}
+        <p className="mt-5 hidden text-base leading-7 text-silver/75 sm:block">
           {t.softwareBody}
         </p>
-        <ul className="mt-7 flex flex-wrap justify-end gap-2">
+        <ul className="mt-4 flex flex-wrap justify-end gap-2 sm:mt-7">
           {t.softwareTags.map((tag) => (
             <li
               key={tag}

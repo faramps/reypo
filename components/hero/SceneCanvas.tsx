@@ -156,7 +156,10 @@ export default function SceneCanvas() {
   const onReady = useCallback(() => setReady(true), []);
 
   const highQuality = tier === "high";
-  const particleCount = highQuality ? 150 : 60;
+  // Yıldız/takımyıldız yoğunluğu kalite kademesinden BAĞIMSIZ: noktalar + çizgiler
+  // ucuzdur, FPS'i düşüren şey DPR/bloom/env. Perf gözcüsü kademeyi "low"a indirse
+  // bile alan dolu kalsın diye sabit tutuyoruz (site açılışındaki dolgun hâl).
+  const particleCount = 220;
 
   return (
     <div className="absolute inset-0">

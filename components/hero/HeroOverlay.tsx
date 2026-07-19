@@ -65,7 +65,7 @@ export default function HeroOverlay() {
       </div>
 
       {/* Bottom: services + scroll hint */}
-      <footer className="flex items-end justify-between gap-6">
+      <footer className="flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
         <ul className="hero-reveal flex flex-wrap gap-x-5 gap-y-1 text-[11px] uppercase tracking-[0.22em] text-silver/50">
           {t.services.map((s) => (
             <li key={s} className="flex items-center gap-2">

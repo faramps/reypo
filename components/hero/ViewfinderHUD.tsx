@@ -48,14 +48,6 @@ export default function ViewfinderHUD() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-20 select-none">
-      {/* rule-of-thirds grid */}
-      <div className="absolute inset-0 opacity-[0.06]">
-        <div className="absolute inset-y-0 left-1/3 w-px bg-white" />
-        <div className="absolute inset-y-0 left-2/3 w-px bg-white" />
-        <div className="absolute inset-x-0 top-1/3 h-px bg-white" />
-        <div className="absolute inset-x-0 top-2/3 h-px bg-white" />
-      </div>
-
       {/* corner crop brackets */}
       <div className="absolute left-5 top-5 h-7 w-7 border-l border-t border-white/30" />
       <div className="absolute right-5 top-5 h-7 w-7 border-r border-t border-white/30" />

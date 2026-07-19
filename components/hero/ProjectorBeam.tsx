@@ -75,21 +75,23 @@ const BEAM_FRAG = /* glsl */ `
   varying vec3 vN;
   varying vec3 vV;
   void main() {
-    // Silhouette edges glow like a real volumetric cone. Brightest at the lamp,
-    // falling off toward the screen so the projected picture stays clean.
-    float edge = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 1.7);
-    float body = 0.05;
-    float along = mix(1.0, 0.26, vT);              // hot at lamp → dim at screen
-    float cap = smoothstep(0.11, 0.0, vT) * 0.9;   // hot burst at the exit pupil
-    // slowly counter-rotating shafts — the "rays" inside the cone
-    float rays = 0.7
-      + 0.2 * sin(vU * 6.2832 * 9.0 + uTime * 0.55)
-      + 0.1 * sin(vU * 6.2832 * 17.0 - uTime * 0.35);
-    float flicker = 0.94 + 0.06 * sin(uTime * 23.0) * sin(uTime * 7.3 + 1.7);
-    float a = ((body + edge * 0.55) * along * rays + cap) * uFade * flicker;
-    // HDR-boost the core so the bloom catches it as real light, not grey haze
-    vec3 col = uColor * (1.0 + 1.1 * cap + 0.35 * edge);
-    gl_FragColor = vec4(col, a * 1.15);
+    // Silhouette edges glow like a real volumetric cone. It's a soft, diffuse
+    // haze at the lamp that DISSIPATES toward the screen, so the far end never
+    // sits as a solid slab over the projected picture.
+    float edge = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 1.35);
+    float body = 0.028;
+    // fades to almost nothing well before the screen (soft cone, clean picture)
+    float along = mix(1.0, 0.05, smoothstep(0.0, 0.9, vT));
+    float cap = smoothstep(0.11, 0.0, vT) * 0.75;  // hot burst at the exit pupil
+    // slowly counter-rotating shafts — softened so the cone reads hazy, not banded
+    float rays = 0.82
+      + 0.12 * sin(vU * 6.2832 * 9.0 + uTime * 0.55)
+      + 0.06 * sin(vU * 6.2832 * 17.0 - uTime * 0.35);
+    float flicker = 0.95 + 0.05 * sin(uTime * 23.0) * sin(uTime * 7.3 + 1.7);
+    float a = ((body + edge * 0.42) * along * rays + cap) * uFade * flicker;
+    // HDR-boost only the lamp core so bloom reads it as light, not grey haze
+    vec3 col = uColor * (1.0 + 1.0 * cap + 0.28 * edge);
+    gl_FragColor = vec4(col, a * 0.68);
   }
 `;
 
@@ -156,15 +158,16 @@ export default function ProjectorBeam({ highQuality }: Props) {
   useEffect(() => () => flareTex.dispose(), [flareTex]);
 
   // Motes start collapsed at the origin; the first visible frame lays them out.
+  // Kept on EVERY tier (140 additive points is negligible) so an auto-downgrade
+  // never empties the beam — the drifting dust is part of the "full" look.
   const dustGeo = useMemo(() => {
-    if (!highQuality) return null;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute(
       "position",
       new THREE.BufferAttribute(new Float32Array(DUST_COUNT * 3), 3),
     );
     return geo;
-  }, [highQuality]);
+  }, []);
   useEffect(() => () => dustGeo?.dispose(), [dustGeo]);
 
   useFrame((state, delta) => {
@@ -183,7 +186,7 @@ export default function ProjectorBeam({ highQuality }: Props) {
       beamMatRef.current.uniforms.uTime.value = state.clock.elapsedTime;
     }
     if (flareMatRef.current) flareMatRef.current.opacity = fade;
-    if (mouthMatRef.current) mouthMatRef.current.opacity = 0.55 * fade;
+    if (mouthMatRef.current) mouthMatRef.current.opacity = 0.22 * fade;
 
     const dust = dustRef.current;
     if (dust && dustMatRef.current) {
@@ -235,7 +238,7 @@ export default function ProjectorBeam({ highQuality }: Props) {
           money shot), so this camera-facing billboard guarantees the "light
           hitting the screen" glow; its centre hides behind the DOM picture
           and the rim spills around it */}
-      <sprite position={[0, 0, BEAM_LEN]} scale={[BEAM_A * 2.6, BEAM_B * 2.6, 1]}>
+      <sprite position={[0, 0, BEAM_LEN]} scale={[BEAM_A * 2.0, BEAM_B * 2.0, 1]}>
         <spriteMaterial
           ref={mouthMatRef}
           map={flareTex}
