@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useLanguage } from "@/lib/i18n";
 import { useContact } from "@/lib/contact";
 import LanguageToggle from "./LanguageToggle";
@@ -16,6 +17,12 @@ export default function TopBar() {
         <span className="text-logo-red">po</span>
       </div>
       <div className="pointer-events-auto flex items-center gap-3 sm:gap-4">
+        <Link
+          href="/login"
+          className="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-white/90 backdrop-blur-md transition-colors hover:border-logo-red/60 hover:bg-white/10"
+        >
+          Giriş
+        </Link>
         <button
           type="button"
           onClick={openContact}

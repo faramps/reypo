@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# local npm config (machine-specific cache path — keep out of git/CI)
+.npmrc
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -32,6 +35,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+
+# marketing videos — kaynak + optimize sürümler; R2'de barındırılır, git'e girmez
+/public/videos/
+/public/*.mp4
 
 # vercel
 .vercel

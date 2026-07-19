@@ -39,10 +39,16 @@ export type ShowreelClip = {
   poster?: string;
 };
 
+// Videolar bir CDN'de (R2) barındırılır. Yerelde env boşsa public/videos/web
+// kullanılır; yayında Vercel'e NEXT_PUBLIC_MEDIA_BASE_URL gir (ör. R2 public
+// URL'si veya media.reypo.com gibi custom domain). Dosya adları iki yerde de aynı.
+const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? "/videos/web").replace(/\/+$/, "");
+
 export const SHOWREEL_CLIPS: ShowreelClip[] = [
-  { src: "/showreel.mp4" },
-  { src: "/vinc-260326.mp4" },
-  { src: "/kobipo-tanitim.mp4" }, // vertical 9:16 — the screen adapts
+  { src: `${MEDIA_BASE}/kocaeli.mp4`, poster: `${MEDIA_BASE}/kocaeli.jpg` },
+  { src: `${MEDIA_BASE}/kizilay-camlik.mp4`, poster: `${MEDIA_BASE}/kizilay-camlik.jpg` }, // dikey 9:16
+  { src: `${MEDIA_BASE}/musiad.mp4`, poster: `${MEDIA_BASE}/musiad.jpg` },
+  { src: `${MEDIA_BASE}/vinc.mp4`, poster: `${MEDIA_BASE}/vinc.jpg` }, // dikey 9:16
 ];
 
 /**
