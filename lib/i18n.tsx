@@ -26,6 +26,8 @@ export type Dict = {
   /** Service labels orbiting the experience (used now + future sections). */
   services: string[];
   langLabel: string;
+  /** Top-bar "sign in" link → the internal Görev Takip app. */
+  loginLabel: string;
 
   /** Services section. */
   servicesKicker: string;
@@ -96,6 +98,7 @@ export const dictionaries: Record<Lang, Dict> = {
     status: "GÖRÜ KONTROL MERKEZİ — ÇEVRİMİÇİ",
     services: ["Kreatif Motion", "İmmersif Web", "Marka Stratejisi", "Yapay Zeka"],
     langLabel: "TR",
+    loginLabel: "Giriş Yap",
     servicesKicker: "YETKİNLİKLER",
     servicesHeading: "Tek bir merceğe odaklanmış disiplinler.",
     serviceDescriptions: [
@@ -154,6 +157,7 @@ export const dictionaries: Record<Lang, Dict> = {
     status: "VISION CONTROL CENTER — ONLINE",
     services: ["Creative Motion", "Immersive Web", "Brand Strategy", "AI Integration"],
     langLabel: "EN",
+    loginLabel: "Sign in",
     servicesKicker: "CAPABILITIES",
     servicesHeading: "Disciplines focused through a single lens.",
     serviceDescriptions: [
