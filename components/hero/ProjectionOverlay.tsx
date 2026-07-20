@@ -555,8 +555,11 @@ export default function ProjectionOverlay() {
               }}
               className="absolute inset-0 h-full w-full object-cover opacity-0 transition-opacity duration-700 ease-in-out"
               // src is set imperatively by assign()/hls.js (a raw .m3u8 src here
-              // would make Chrome error before hls.js can attach)
-              poster={slot === 0 ? clips[0].poster : undefined}
+              // would make Chrome error before hls.js can attach). No `poster`
+              // on purpose: a <video> poster is fetched NO-CORS, and that
+              // cache-poisons the crossOrigin WebGL cover load of the SAME .jpg
+              // (reel-0's gallery cover would then fall back to the film-strip).
+              // The Placeholder behind these slots already covers the pre-roll.
               muted
               loop
               playsInline
