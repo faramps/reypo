@@ -122,7 +122,13 @@ function requestCover(
     img.onerror = () => {
       coverPending.delete(url); // a later request may retry (e.g. once CORS is live)
     };
-    img.src = url;
+    // Fetch the pixels under a DISTINCT URL (?webgltex) so this crossOrigin load
+    // can never reuse a NO-CORS cached copy of the same .jpg — e.g. one a <video
+    // poster> once fetched without CORS. That mismatch tainted the texture and
+    // the cover silently fell back to the film-strip (reel 0 / kocaeli was hit
+    // because it doubled as the centre-video poster). A separate cache key sidesteps
+    // it entirely, and keeps working even on browsers that already cached the poison.
+    img.src = url + (url.includes("?") ? "&" : "?") + "webgltex";
   }
 
   return () => {
