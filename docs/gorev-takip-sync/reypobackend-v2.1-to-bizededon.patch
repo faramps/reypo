@@ -1,0 +1,1276 @@
+diff --git a/app/(app)/admin/page.tsx b/app/(app)/admin/page.tsx
+index 3a1ded0..aa11ed8 100644
+--- a/app/(app)/admin/page.tsx
++++ b/app/(app)/admin/page.tsx
+@@ -3,6 +3,7 @@ import {
+   CalendarDays,
+   ContactRound,
+   FolderKanban,
++  ListChecks,
+   Tags,
+   Users,
+   type LucideIcon,
+@@ -15,12 +16,44 @@ import {
+   type PendingItem,
+ } from "@/components/admin/pending-approvals";
+ 
+-const shortcuts: { label: string; href: string; icon: LucideIcon }[] = [
+-  { label: "Atama Takvimi", href: "/admin/calendar", icon: CalendarDays },
+-  { label: "Kişi Görevleri", href: "/admin/people", icon: ContactRound },
+-  { label: "Projeler", href: "/projects", icon: FolderKanban },
+-  { label: "İş Rolleri", href: "/admin/roles", icon: Tags },
+-  { label: "Kullanıcılar", href: "/admin/users", icon: Users },
++// Her kısayolun kendi rengi: ikonlar tek tip gri yerine yumuşak renkli
++// çiplerde, hangi kısayolun ne olduğu bir bakışta ayrışır.
++const shortcuts: {
++  label: string;
++  href: string;
++  icon: LucideIcon;
++  chip: string;
++}[] = [
++  {
++    label: "Atama Takvimi",
++    href: "/admin/calendar",
++    icon: CalendarDays,
++    chip: "bg-sky-100 text-sky-700",
++  },
++  {
++    label: "Kişi Görevleri",
++    href: "/admin/people",
++    icon: ContactRound,
++    chip: "bg-violet-100 text-violet-700",
++  },
++  {
++    label: "Projeler",
++    href: "/projects",
++    icon: FolderKanban,
++    chip: "bg-amber-100 text-amber-800",
++  },
++  {
++    label: "İş Rolleri",
++    href: "/admin/roles",
++    icon: Tags,
++    chip: "bg-rose-100 text-rose-700",
++  },
++  {
++    label: "Kullanıcılar",
++    href: "/admin/users",
++    icon: Users,
++    chip: "bg-indigo-100 text-indigo-700",
++  },
+ ];
+ 
+ export default async function AdminOverviewPage() {
+@@ -90,12 +123,34 @@ export default async function AdminOverviewPage() {
+     .filter((p) => !p.is_archived)
+     .map((p) => ({ id: p.id, name: p.name }));
+ 
+-  const stats = [
+-    { label: "Kullanıcı", value: userCount ?? 0 },
+-    { label: "Proje", value: projectCount ?? 0 },
++  const stats: {
++    label: string;
++    value: number;
++    icon: LucideIcon;
++    chip: string;
++    href: string;
++    detail?: string;
++  }[] = [
++    {
++      label: "Kullanıcı",
++      value: userCount ?? 0,
++      icon: Users,
++      chip: "bg-indigo-100 text-indigo-700",
++      href: "/admin/users",
++    },
++    {
++      label: "Proje",
++      value: projectCount ?? 0,
++      icon: FolderKanban,
++      chip: "bg-sky-100 text-sky-700",
++      href: "/projects",
++    },
+     {
+       label: "Görev",
+       value: taskCount ?? 0,
++      icon: ListChecks,
++      chip: "bg-emerald-100 text-emerald-700",
++      href: "/admin/people",
+       detail: `${doneCount ?? 0} tamamlandı`,
+     },
+   ];
+@@ -105,7 +160,8 @@ export default async function AdminOverviewPage() {
+       <h1 className="text-lg font-semibold">Yönetim</h1>
+ 
+       <section className="space-y-2">
+-        <h2 className="text-sm font-medium text-muted-foreground">
++        <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
++          <span aria-hidden className="h-2 w-2 rounded-full bg-violet-500" />
+           Onay Bekleyenler{" "}
+           <span className="text-muted-foreground/60">({pending.length})</span>
+         </h2>
+@@ -130,20 +186,31 @@ export default async function AdminOverviewPage() {
+       </section>
+ 
+       <section className="grid grid-cols-3 gap-4">
+-        {stats.map((stat) => (
+-          <div
+-            key={stat.label}
+-            className="rounded-xl border border-border bg-card p-4 shadow-xs"
+-          >
+-            <p className="text-2xl font-semibold">{stat.value}</p>
+-            <p className="mt-0.5 text-sm text-muted-foreground">{stat.label}</p>
+-            {stat.detail && (
+-              <p className="mt-1 text-xs text-muted-foreground">
+-                {stat.detail}
++        {stats.map((stat) => {
++          const Icon = stat.icon;
++          return (
++            <Link
++              key={stat.label}
++              href={stat.href}
++              className="block rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:border-ring/40 hover:shadow-sm"
++            >
++              <span
++                className={`grid h-8 w-8 place-items-center rounded-lg ${stat.chip}`}
++              >
++                <Icon className="h-4 w-4" />
++              </span>
++              <p className="mt-2 text-2xl font-semibold">{stat.value}</p>
++              <p className="mt-0.5 text-sm text-muted-foreground">
++                {stat.label}
+               </p>
+-            )}
+-          </div>
+-        ))}
++              {stat.detail && (
++                <p className="mt-1 text-xs font-medium text-emerald-600">
++                  {stat.detail}
++                </p>
++              )}
++            </Link>
++          );
++        })}
+       </section>
+ 
+       <section className="space-y-2">
+@@ -157,7 +224,11 @@ export default async function AdminOverviewPage() {
+                 href={s.href}
+                 className="flex items-center gap-2.5 rounded-xl border border-border bg-card p-4 text-sm font-medium shadow-xs transition-all hover:border-ring/40 hover:shadow-sm"
+               >
+-                <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
++                <span
++                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${s.chip}`}
++                >
++                  <Icon className="h-4.5 w-4.5" />
++                </span>
+                 {s.label}
+               </Link>
+             );
+diff --git a/app/(app)/admin/people/page.tsx b/app/(app)/admin/people/page.tsx
+index 7b6c111..3f34b76 100644
+--- a/app/(app)/admin/people/page.tsx
++++ b/app/(app)/admin/people/page.tsx
+@@ -7,6 +7,7 @@ import {
+   statusLabel,
+ } from "@/lib/task-labels";
+ import { initials } from "@/lib/format";
++import { colorFor } from "@/lib/palette";
+ import type { TaskStatus } from "@/lib/supabase/types";
+ 
+ // Kişi kartında görevleri "aksiyon isteyen"den sona doğru sırala.
+@@ -119,7 +120,9 @@ export default async function AdminPeoplePage() {
+             className="rounded-xl border border-border bg-card p-4 shadow-xs"
+           >
+             <div className="flex items-center gap-3">
+-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
++              <span
++                className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-semibold ${colorFor(person.id).chip}`}
++              >
+                 {initials(person.name)}
+               </span>
+               <div className="min-w-0 flex-1">
+diff --git a/app/(app)/calendar/page.tsx b/app/(app)/calendar/page.tsx
+index 0a2eb69..950dff3 100644
+--- a/app/(app)/calendar/page.tsx
++++ b/app/(app)/calendar/page.tsx
+@@ -1,5 +1,5 @@
+ import { redirect } from "next/navigation";
+-import { createClient } from "@/lib/supabase/server";
++import { getCurrentProfile } from "@/lib/supabase/current-profile";
+ import { TaskCalendar, type CalDay, type CalTask } from "@/components/task-calendar";
+ 
+ function pad(n: number) {
+@@ -14,15 +14,19 @@ export default async function MyCalendarPage({
+ }: {
+   searchParams: Promise<{ month?: string }>;
+ }) {
+-  const supabase = await createClient();
+-  const {
+-    data: { user },
+-  } = await supabase.auth.getUser();
++  const { supabase, user, profile } = await getCurrentProfile();
+ 
+   if (!user) {
+     redirect("/login");
+   }
+ 
++  // Bu takvim çalışan görünümüdür (kendine atanan görevler); yönetici
++  // kendine görev alamadığı için burası ona hep boş görünür — Atama
++  // Takvimi'ne yönlendirilir (2026-07-14 ürün kararı).
++  if (profile?.system_role === "admin") {
++    redirect("/admin/calendar");
++  }
++
+   const { month: monthParam } = await searchParams;
+ 
+   const now = new Date();
+diff --git a/app/(app)/layout.tsx b/app/(app)/layout.tsx
+index 39ee035..61c554f 100644
+--- a/app/(app)/layout.tsx
++++ b/app/(app)/layout.tsx
+@@ -42,7 +42,7 @@ export default async function AppLayout({
+         {/* Mobil üst bar; masaüstünde sidebar bu bilgileri taşıdığı için gizli */}
+         <header className="flex items-center justify-between border-b border-border bg-background px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:hidden">
+           <div className="flex items-center gap-2">
+-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
++            <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-bold text-white">
+               G
+             </span>
+             <span className="text-sm font-semibold">Görev Takip</span>
+diff --git a/app/(app)/page.tsx b/app/(app)/page.tsx
+index d77f954..7f25455 100644
+--- a/app/(app)/page.tsx
++++ b/app/(app)/page.tsx
+@@ -1,7 +1,7 @@
+ import { redirect } from "next/navigation";
+ import { getCurrentProfile } from "@/lib/supabase/current-profile";
+ import { TaskCard } from "@/components/task-card";
+-import { priorityOrder } from "@/lib/task-labels";
++import { priorityOrder, statusDotClass } from "@/lib/task-labels";
+ import type { TaskStatus } from "@/lib/supabase/types";
+ 
+ const groups: { status: TaskStatus; label: string }[] = [
+@@ -31,6 +31,26 @@ export default async function TasksPage() {
+     (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]
+   );
+ 
++  // Revize istenen görevlerde yöneticinin son notu kartta görünsün
++  // (çalışan detaya girmeden ne istendiğini görür).
++  const revisionIds = sorted
++    .filter((t) => t.status === "revision")
++    .map((t) => t.id);
++  const lastRevisionNote = new Map<string, string>();
++  if (revisionIds.length > 0) {
++    const { data: revNotes } = await supabase
++      .from("task_revisions")
++      .select("task_id, note, created_at")
++      .in("task_id", revisionIds)
++      .eq("kind", "revision_requested")
++      .order("created_at", { ascending: false });
++    for (const r of revNotes ?? []) {
++      if (r.note && !lastRevisionNote.has(r.task_id)) {
++        lastRevisionNote.set(r.task_id, r.note);
++      }
++    }
++  }
++
+   return (
+     <div className="space-y-6">
+       <h1 className="text-lg font-semibold">Görevlerim</h1>
+@@ -48,8 +68,15 @@ export default async function TasksPage() {
+         }
+         return (
+           <section key={group.status} className="space-y-2">
+-            <h2 className="text-sm font-medium text-muted-foreground">
++            <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
++              <span
++                aria-hidden
++                className={`h-2 w-2 rounded-full ${statusDotClass[group.status]}`}
++              />
+               {group.label}
++              <span className="text-muted-foreground/60">
++                ({groupTasks.length})
++              </span>
+             </h2>
+             <ul className="space-y-2">
+               {groupTasks.map((task) => (
+@@ -57,6 +84,8 @@ export default async function TasksPage() {
+                   key={task.id}
+                   task={task}
+                   meta={projectNameById.get(task.project_id) ?? ""}
++                  revisionNote={lastRevisionNote.get(task.id)}
++                  quickActions
+                 />
+               ))}
+             </ul>
+diff --git a/app/(app)/projects/page.tsx b/app/(app)/projects/page.tsx
+index 372aa58..2dbaea1 100644
+--- a/app/(app)/projects/page.tsx
++++ b/app/(app)/projects/page.tsx
+@@ -1,6 +1,7 @@
+ import Link from "next/link";
+ import { getCurrentProfile } from "@/lib/supabase/current-profile";
+ import { ProjectForm } from "@/components/projects/project-form";
++import { colorFor } from "@/lib/palette";
+ 
+ export default async function ProjectsPage() {
+   const { supabase, profile } = await getCurrentProfile();
+@@ -34,7 +35,13 @@ export default async function ProjectsPage() {
+               href={`/projects/${project.id}`}
+               className="block rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:border-ring/40 hover:shadow-sm"
+             >
+-              <span className="break-words font-medium">{project.name}</span>
++              <span className="flex items-center gap-2">
++                <span
++                  aria-hidden
++                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${colorFor(project.id).dot}`}
++                />
++                <span className="break-words font-medium">{project.name}</span>
++              </span>
+               {project.description && (
+                 <p className="mt-1 break-words text-sm text-muted-foreground">
+                   {project.description}
+diff --git a/app/(app)/settings/page.tsx b/app/(app)/settings/page.tsx
+index fa0a05b..7285cb2 100644
+--- a/app/(app)/settings/page.tsx
++++ b/app/(app)/settings/page.tsx
+@@ -1,10 +1,32 @@
+ import { redirect } from "next/navigation";
++import { Bell, ShieldCheck, Smartphone, UserRound } from "lucide-react";
+ import { getCurrentProfile } from "@/lib/supabase/current-profile";
+ import { ProfileForm } from "@/components/profile-form";
+ import { ChangePasswordForm } from "@/components/change-password-form";
+ import { PushSubscriptionManager } from "@/components/push-subscription-manager";
+ import { InstallPrompt } from "@/components/install-prompt";
+ 
++function SectionTitle({
++  icon: Icon,
++  chip,
++  children,
++}: {
++  icon: typeof UserRound;
++  chip: string;
++  children: React.ReactNode;
++}) {
++  return (
++    <h2 className="flex items-center gap-2 text-sm font-medium">
++      <span
++        className={`grid h-6 w-6 shrink-0 place-items-center rounded-md ${chip}`}
++      >
++        <Icon className="h-3.5 w-3.5" />
++      </span>
++      {children}
++    </h2>
++  );
++}
++
+ export default async function SettingsPage() {
+   const { user, profile } = await getCurrentProfile();
+ 
+@@ -17,22 +39,30 @@ export default async function SettingsPage() {
+       <h1 className="text-lg font-semibold">Ayarlar</h1>
+ 
+       <section className="space-y-2">
+-        <h2 className="text-sm font-medium">Profil</h2>
++        <SectionTitle icon={UserRound} chip="bg-indigo-100 text-indigo-700">
++          Profil
++        </SectionTitle>
+         <ProfileForm initialFullName={profile?.full_name ?? ""} />
+       </section>
+ 
+       <section className="space-y-2">
+-        <h2 className="text-sm font-medium">Güvenlik</h2>
++        <SectionTitle icon={ShieldCheck} chip="bg-emerald-100 text-emerald-700">
++          Güvenlik
++        </SectionTitle>
+         <ChangePasswordForm />
+       </section>
+ 
+       <section className="space-y-2">
+-        <h2 className="text-sm font-medium">Bildirimler</h2>
++        <SectionTitle icon={Bell} chip="bg-amber-100 text-amber-800">
++          Bildirimler
++        </SectionTitle>
+         <PushSubscriptionManager />
+       </section>
+ 
+       <section className="space-y-2">
+-        <h2 className="text-sm font-medium">Uygulama</h2>
++        <SectionTitle icon={Smartphone} chip="bg-sky-100 text-sky-700">
++          Uygulama
++        </SectionTitle>
+         <InstallPrompt />
+       </section>
+     </div>
+diff --git a/app/(app)/tasks/[id]/page.tsx b/app/(app)/tasks/[id]/page.tsx
+index 14e9b0f..c6e0cda 100644
+--- a/app/(app)/tasks/[id]/page.tsx
++++ b/app/(app)/tasks/[id]/page.tsx
+@@ -16,6 +16,7 @@ import {
+   statusLabel,
+ } from "@/lib/task-labels";
+ import { formatDate, formatDateTime, initials, isOverdue } from "@/lib/format";
++import { colorFor } from "@/lib/palette";
+ 
+ export default async function TaskDetailPage({
+   params,
+@@ -166,7 +167,9 @@ export default async function TaskDetailPage({
+           <div>
+             <dt className="text-xs text-muted-foreground">Atanan</dt>
+             <dd className="mt-1 flex items-center gap-2">
+-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground">
++              <span
++                className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${colorFor(task.assignee_id).chip}`}
++              >
+                 {initials(assigneeName === "—" ? "" : assigneeName)}
+               </span>
+               <span className="truncate">{assigneeName}</span>
+diff --git a/app/globals.css b/app/globals.css
+index c919aa4..52aa25c 100644
+--- a/app/globals.css
++++ b/app/globals.css
+@@ -48,39 +48,44 @@
+   --radius-4xl: calc(var(--radius) * 2.6);
+ }
+ 
++/* Marka rengi: indigo. Durum rozetleriyle (mavi/amber/mor/gül/zümrüt)
++   çakışmasın diye "in_progress" mavisinden ayrık bir ton seçildi.
++   Nötr griler slate'e (hafif soğuk) kaydırıldı; kartlar beyaz kalıp
++   slate-50 zeminden ayrışır. */
+ :root {
+-  --background: oklch(1 0 0);
+-  --foreground: oklch(0.145 0 0);
++  --background: oklch(0.984 0.003 247.858); /* slate-50 */
++  --foreground: oklch(0.208 0.042 265.755); /* slate-900 */
+   --card: oklch(1 0 0);
+-  --card-foreground: oklch(0.145 0 0);
++  --card-foreground: oklch(0.208 0.042 265.755);
+   --popover: oklch(1 0 0);
+-  --popover-foreground: oklch(0.145 0 0);
+-  --primary: oklch(0.205 0 0);
++  --popover-foreground: oklch(0.208 0.042 265.755);
++  --primary: oklch(0.511 0.262 276.966); /* indigo-600 */
+   --primary-foreground: oklch(0.985 0 0);
+-  --secondary: oklch(0.97 0 0);
+-  --secondary-foreground: oklch(0.205 0 0);
+-  --muted: oklch(0.97 0 0);
+-  --muted-foreground: oklch(0.556 0 0);
+-  --accent: oklch(0.97 0 0);
+-  --accent-foreground: oklch(0.205 0 0);
++  --secondary: oklch(0.968 0.007 247.896); /* slate-100 */
++  --secondary-foreground: oklch(0.279 0.041 260.031); /* slate-800 */
++  --muted: oklch(0.968 0.007 247.896);
++  --muted-foreground: oklch(0.554 0.046 257.417); /* slate-500 */
++  --accent: oklch(0.962 0.018 272.314); /* indigo-50 */
++  --accent-foreground: oklch(0.398 0.195 277.366); /* indigo-800 */
+   --destructive: oklch(0.577 0.245 27.325);
+-  --border: oklch(0.922 0 0);
+-  --input: oklch(0.922 0 0);
+-  --ring: oklch(0.708 0 0);
+-  --chart-1: oklch(0.87 0 0);
+-  --chart-2: oklch(0.556 0 0);
+-  --chart-3: oklch(0.439 0 0);
+-  --chart-4: oklch(0.371 0 0);
+-  --chart-5: oklch(0.269 0 0);
++  --border: oklch(0.929 0.013 255.508); /* slate-200 */
++  --input: oklch(0.929 0.013 255.508);
++  --ring: oklch(0.673 0.182 276.935); /* indigo-400 */
++  /* Grafikler durum renkleriyle aynı dili konuşur */
++  --chart-1: oklch(0.769 0.188 70.08); /* amber-500 · bekliyor */
++  --chart-2: oklch(0.623 0.214 259.815); /* blue-500 · devam ediyor */
++  --chart-3: oklch(0.606 0.25 292.717); /* violet-500 · onay bekliyor */
++  --chart-4: oklch(0.645 0.246 16.439); /* rose-500 · revize */
++  --chart-5: oklch(0.696 0.17 162.48); /* emerald-500 · tamamlandı */
+   --radius: 0.625rem;
+-  --sidebar: oklch(0.985 0 0);
+-  --sidebar-foreground: oklch(0.145 0 0);
+-  --sidebar-primary: oklch(0.205 0 0);
++  --sidebar: oklch(1 0 0);
++  --sidebar-foreground: oklch(0.208 0.042 265.755);
++  --sidebar-primary: oklch(0.511 0.262 276.966);
+   --sidebar-primary-foreground: oklch(0.985 0 0);
+-  --sidebar-accent: oklch(0.97 0 0);
+-  --sidebar-accent-foreground: oklch(0.205 0 0);
+-  --sidebar-border: oklch(0.922 0 0);
+-  --sidebar-ring: oklch(0.708 0 0);
++  --sidebar-accent: oklch(0.962 0.018 272.314); /* indigo-50 */
++  --sidebar-accent-foreground: oklch(0.457 0.24 277.023); /* indigo-700 */
++  --sidebar-border: oklch(0.929 0.013 255.508);
++  --sidebar-ring: oklch(0.673 0.182 276.935);
+ }
+ 
+ /* Ürün kararı (2026-07-09): uygulama yalnızca aydınlık tema kullanır.
+diff --git a/components/admin/pending-approvals.tsx b/components/admin/pending-approvals.tsx
+index 10e7431..2900676 100644
+--- a/components/admin/pending-approvals.tsx
++++ b/components/admin/pending-approvals.tsx
+@@ -63,7 +63,7 @@ function PendingApprovalRow({ item }: { item: PendingItem }) {
+             className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+           >
+             <Check className="h-4 w-4" />
+-            Onayla
++            Görevi Bitir
+           </button>
+           <button
+             type="button"
+diff --git a/components/app-nav.tsx b/components/app-nav.tsx
+index 3a7141a..4d6ab83 100644
+--- a/components/app-nav.tsx
++++ b/components/app-nav.tsx
+@@ -18,6 +18,8 @@ import {
+ } from "lucide-react";
+ import { useUnreadNotifications } from "@/lib/hooks/use-unread-notifications";
+ import { logout } from "@/lib/actions/auth";
++import { colorFor } from "@/lib/palette";
++import { initials } from "@/lib/format";
+ 
+ type NavItem = {
+   href: string;
+@@ -44,9 +46,13 @@ export function AppNav({
+   const pathname = usePathname();
+   const unreadCount = useUnreadNotifications(userId, initialUnreadIds);
+ 
++  // Takvim çalışan görünümüdür (kendine atanan görevler); yönetici Atama
++  // Takvimi'ni kullandığı için menüsünde gösterilmez.
+   const mainItems: NavItem[] = [
+     { href: "/", label: "Görevlerim", icon: ListChecks },
+-    { href: "/calendar", label: "Takvim", icon: CalendarDays },
++    ...(isAdmin
++      ? []
++      : [{ href: "/calendar", label: "Takvim", icon: CalendarDays } satisfies NavItem]),
+     { href: "/notifications", label: "Bildirimler", icon: Bell, badge: unreadCount },
+     { href: "/settings", label: "Ayarlar", icon: Settings },
+   ];
+@@ -80,7 +86,7 @@ export function AppNav({
+         <Icon className="h-4 w-4 shrink-0" />
+         <span className="truncate">{item.label}</span>
+         {!!item.badge && (
+-          <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-medium text-destructive-foreground">
++          <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-medium text-primary-foreground">
+             {item.badge > 9 ? "9+" : item.badge}
+           </span>
+         )}
+@@ -93,10 +99,14 @@ export function AppNav({
+   // (projelere Yönetim panelindeki kısayoldan ulaşılır); üye "Projeler"i görür.
+   const mobileItems: NavItem[] = [
+     { href: "/", label: "Görevlerim", icon: ListChecks },
+-    { href: "/calendar", label: "Takvim", icon: CalendarDays },
+     ...(isAdmin
+       ? []
+       : [
++          {
++            href: "/calendar",
++            label: "Takvim",
++            icon: CalendarDays,
++          } satisfies NavItem,
+           {
+             href: "/projects",
+             label: "Projeler",
+@@ -117,7 +127,7 @@ export function AppNav({
+       {/* Masaüstü: sabit sol sidebar */}
+       <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+         <div className="flex items-center gap-2.5 px-5 pb-5 pt-6">
+-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
++          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white">
+             G
+           </span>
+           <span className="truncate text-sm font-semibold">Görev Takip</span>
+@@ -149,7 +159,7 @@ export function AppNav({
+               href={`/projects/${project.id}`}
+               className={itemClass(pathname === `/projects/${project.id}`)}
+             >
+-              <Hash className="h-4 w-4 shrink-0" />
++              <Hash className={`h-4 w-4 shrink-0 ${colorFor(project.id).icon}`} />
+               <span className="truncate">{project.name}</span>
+             </Link>
+           ))}
+@@ -178,10 +188,17 @@ export function AppNav({
+         </nav>
+ 
+         <div className="border-t border-sidebar-border p-3">
+-          <p className="truncate px-3 pb-2 text-xs text-muted-foreground">
+-            {userLabel}
+-            {isAdmin ? " · Yönetici" : ""}
+-          </p>
++          <div className="flex items-center gap-2 px-3 pb-2">
++            <span
++              className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${colorFor(userId).chip}`}
++            >
++              {initials(userLabel)}
++            </span>
++            <p className="min-w-0 truncate text-xs text-muted-foreground">
++              {userLabel}
++              {isAdmin ? " · Yönetici" : ""}
++            </p>
++          </div>
+           <form action={logout}>
+             <button
+               type="submit"
+@@ -204,13 +221,13 @@ export function AppNav({
+               key={item.href}
+               href={item.href}
+               className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] ${
+-                active ? "font-medium text-foreground" : "text-muted-foreground"
++                active ? "font-medium text-primary" : "text-muted-foreground"
+               }`}
+             >
+               <Icon className="h-5 w-5" />
+               {item.label}
+               {!!item.badge && (
+-                <span className="absolute right-1/2 top-1 flex h-3.5 min-w-3.5 translate-x-3 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-medium text-destructive-foreground">
++                <span className="absolute right-1/2 top-1 flex h-3.5 min-w-3.5 translate-x-3 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-medium text-primary-foreground">
+                   {item.badge > 9 ? "9+" : item.badge}
+                 </span>
+               )}
+diff --git a/components/login-form.tsx b/components/login-form.tsx
+index 358a9f7..e050367 100644
+--- a/components/login-form.tsx
++++ b/components/login-form.tsx
+@@ -16,7 +16,7 @@ export function LoginForm() {
+         className="w-full max-w-sm space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
+       >
+         <div className="space-y-2 text-center">
+-          <span className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-primary text-base font-bold text-primary-foreground">
++          <span className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-base font-bold text-white">
+             G
+           </span>
+           <h1 className="text-xl font-semibold">Görev Takip</h1>
+diff --git a/components/task-calendar.tsx b/components/task-calendar.tsx
+index aadf210..1e82f8a 100644
+--- a/components/task-calendar.tsx
++++ b/components/task-calendar.tsx
+@@ -33,7 +33,7 @@ function formatLongDate(dateStr: string) {
+ }
+ 
+ // Aylık takvim ızgarası (salt-okunur). Admin, seçili gün için bir form eklemek
+-// üzere renderFooter geçirir; kullanıcı takviminde renderFooter yoktur.
++// üzere renderFooter geçirir (Atama Takvimi'nde güne görev atama paneli).
+ export function TaskCalendar({
+   title,
+   subtitle,
+@@ -117,7 +117,9 @@ export function TaskCalendar({
+                 onClick={() => setSelectedDate(d.date)}
+                 className={`flex min-h-20 flex-col gap-1 border-b border-r border-border p-1.5 text-left align-top transition-colors last:border-r-0 hover:bg-accent/40 ${
+                   d.inMonth ? "" : "bg-muted/30 text-muted-foreground"
+-                } ${isSelected ? "ring-2 ring-inset ring-ring" : ""}`}
++                } ${d.isToday ? "bg-accent/50" : ""} ${
++                  isSelected ? "ring-2 ring-inset ring-ring" : ""
++                }`}
+               >
+                 <span
+                   className={`inline-flex h-6 w-6 items-center justify-center self-start rounded-full text-xs ${
+diff --git a/components/task-card.tsx b/components/task-card.tsx
+index 09e4ded..4c0a9c3 100644
+--- a/components/task-card.tsx
++++ b/components/task-card.tsx
+@@ -1,16 +1,20 @@
+ import Link from "next/link";
+ import {
++  priorityAccentClass,
+   priorityBadgeClass,
+   priorityLabel,
+   statusBadgeClass,
+   statusLabel,
+ } from "@/lib/task-labels";
+ import { formatDate, isOverdue } from "@/lib/format";
++import { TaskQuickActions } from "@/components/tasks/task-quick-actions";
+ import type { TaskPriority, TaskStatus } from "@/lib/supabase/types";
+ 
+ export function TaskCard({
+   task,
+   meta,
++  revisionNote,
++  quickActions = false,
+ }: {
+   task: {
+     id: string;
+@@ -23,13 +27,17 @@ export function TaskCard({
+   // Bağlama göre çağıran belirler: proje detayında atanan kişi adı,
+   // "Görevlerim"de proje adı gösterilir.
+   meta?: string;
++  // Revize istenen görevde yöneticinin son notu; detaya girmeden görünsün.
++  revisionNote?: string;
++  // Karttan detaya girmeden durum ilerletme butonları (yalnızca atananın
++  // kendi listesinde açılır; yönetici görünümlerinde kapalı kalır).
++  quickActions?: boolean;
+ }) {
+   return (
+-    <li>
+-      <Link
+-        href={`/tasks/${task.id}`}
+-        className="block rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:border-ring/40 hover:shadow-sm"
+-      >
++    <li
++      className={`rounded-xl border border-l-4 border-border bg-card shadow-xs transition-all hover:border-ring/40 hover:shadow-sm ${priorityAccentClass[task.priority]}`}
++    >
++      <Link href={`/tasks/${task.id}`} className="block p-4">
+         <div className="flex items-center justify-between gap-2">
+           <span className="min-w-0 truncate font-medium">{task.title}</span>
+           <span
+@@ -57,7 +65,15 @@ export function TaskCard({
+             <span>Son tarih: {formatDate(task.due_date)}</span>
+           )}
+         </div>
++        {revisionNote && (
++          <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
++            <span className="font-medium">Revize notu:</span> {revisionNote}
++          </p>
++        )}
+       </Link>
++      {quickActions && (
++        <TaskQuickActions taskId={task.id} status={task.status} />
++      )}
+     </li>
+   );
+ }
+diff --git a/components/tasks/task-approval-actions.tsx b/components/tasks/task-approval-actions.tsx
+index f6c328e..9a03981 100644
+--- a/components/tasks/task-approval-actions.tsx
++++ b/components/tasks/task-approval-actions.tsx
+@@ -5,8 +5,10 @@ import { Check, Undo2 } from "lucide-react";
+ import { approveTask, requestRevision } from "@/lib/actions/tasks";
+ 
+ // Yalnızca yönetici + onay bekleyen görev için render edilir (görev detay sayfası).
+-// "Onayla" görevi tamamlar; "Revize İste" notla birlikte geri gönderir (not zorunlu).
++// "Onayla" görevi doğrudan tamamlar; "Revize İste" önce not alanını açar,
++// not yazılınca gönderilir (pending-approvals ile aynı iki aşamalı desen).
+ export function TaskApprovalActions({ taskId }: { taskId: string }) {
++  const [revising, setRevising] = useState(false);
+   const [note, setNote] = useState("");
+   const [isPending, startTransition] = useTransition();
+   const [error, setError] = useState<string | null>(null);
+@@ -27,41 +29,24 @@ export function TaskApprovalActions({ taskId }: { taskId: string }) {
+   return (
+     <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/60 p-4">
+       <p className="text-sm font-medium text-violet-900">
+-        Bu görev onayınızı bekliyor.
++        Çalışan görevi tamamladı. Görevi bitirip kapatabilir veya revize
++        isteyebilirsiniz.
+       </p>
+ 
+-      <div className="space-y-1">
+-        <label htmlFor="revision_note" className="text-sm font-medium">
+-          Revize notu{" "}
+-          <span className="font-normal text-muted-foreground">
+-            (revize isteğinde zorunlu)
+-          </span>
+-        </label>
+-        <textarea
+-          id="revision_note"
+-          rows={3}
+-          value={note}
+-          onChange={(e) => setNote(e.target.value)}
+-          placeholder="Neyin düzeltilmesi gerektiğini yazın…"
+-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:ring-2 focus:ring-ring"
+-        />
+-      </div>
+-
+       <div className="flex flex-wrap gap-2">
+         <button
+           type="button"
+           disabled={isPending}
+-          onClick={() => run(() => approveTask(taskId, note))}
++          onClick={() => run(() => approveTask(taskId))}
+           className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+         >
+           <Check className="h-4 w-4" />
+-          Onayla
++          Görevi Bitir
+         </button>
+         <button
+           type="button"
+-          disabled={isPending || noteEmpty}
+-          title={noteEmpty ? "Önce revize notu yazın" : undefined}
+-          onClick={() => run(() => requestRevision(taskId, note))}
++          disabled={isPending}
++          onClick={() => setRevising((v) => !v)}
+           className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
+         >
+           <Undo2 className="h-4 w-4" />
+@@ -69,6 +54,40 @@ export function TaskApprovalActions({ taskId }: { taskId: string }) {
+         </button>
+       </div>
+ 
++      {revising && (
++        <div className="space-y-2">
++          <textarea
++            autoFocus
++            rows={3}
++            value={note}
++            onChange={(e) => setNote(e.target.value)}
++            placeholder="Neyin düzeltilmesi gerektiğini yazın…"
++            className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:ring-2 focus:ring-ring"
++          />
++          <div className="flex gap-2">
++            <button
++              type="button"
++              disabled={isPending || noteEmpty}
++              title={noteEmpty ? "Önce revize notu yazın" : undefined}
++              onClick={() => run(() => requestRevision(taskId, note))}
++              className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
++            >
++              Revize Gönder
++            </button>
++            <button
++              type="button"
++              onClick={() => {
++                setRevising(false);
++                setNote("");
++              }}
++              className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
++            >
++              Vazgeç
++            </button>
++          </div>
++        </div>
++      )}
++
+       {error && <p className="text-sm text-destructive">{error}</p>}
+     </div>
+   );
+diff --git a/components/tasks/task-quick-actions.tsx b/components/tasks/task-quick-actions.tsx
+new file mode 100644
+index 0000000..b08bac9
+--- /dev/null
++++ b/components/tasks/task-quick-actions.tsx
+@@ -0,0 +1,47 @@
++"use client";
++
++import { useState, useTransition } from "react";
++import { submitForApproval } from "@/lib/actions/tasks";
++import type { TaskStatus } from "@/lib/supabase/types";
++
++// Görev kartından detaya girmeden "Tamamladım" ("Görevlerim" listesi).
++// Revize cevabı not gerektirebildiği için revision durumunda hızlı buton yok;
++// kart, cevap kutusunun olduğu detay sayfasına götürür. in_progress yalnızca
++// eski kayıtlar için tanınır ("Başladım" adımı kaldırıldı).
++export function TaskQuickActions({
++  taskId,
++  status,
++}: {
++  taskId: string;
++  status: TaskStatus;
++}) {
++  const [isPending, startTransition] = useTransition();
++  const [error, setError] = useState<string | null>(null);
++
++  if (status !== "todo" && status !== "in_progress") {
++    return null;
++  }
++
++  return (
++    <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2">
++      {error && <p className="mr-auto text-xs text-destructive">{error}</p>}
++      <button
++        type="button"
++        disabled={isPending}
++        onClick={() => {
++          setError(null);
++          startTransition(async () => {
++            try {
++              await submitForApproval(taskId);
++            } catch {
++              setError("İşlem tamamlanamadı, tekrar deneyin.");
++            }
++          });
++        }}
++        className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50"
++      >
++        {isPending ? "Gönderiliyor…" : "Tamamladım"}
++      </button>
++    </div>
++  );
++}
+diff --git a/components/tasks/task-status-actions.tsx b/components/tasks/task-status-actions.tsx
+index 9961c5a..cec6cf9 100644
+--- a/components/tasks/task-status-actions.tsx
++++ b/components/tasks/task-status-actions.tsx
+@@ -2,11 +2,7 @@
+ 
+ import { useState, useTransition } from "react";
+ import { RotateCcw } from "lucide-react";
+-import {
+-  startTask,
+-  submitForApproval,
+-  reopenTask,
+-} from "@/lib/actions/tasks";
++import { submitForApproval, reopenTask } from "@/lib/actions/tasks";
+ import type { TaskStatus } from "@/lib/supabase/types";
+ 
+ // Çalışan (atanan kişi) tarafı: durumu ilerletme butonları.
+@@ -25,6 +21,8 @@ export function TaskStatusActions({
+ }) {
+   const [isPending, startTransition] = useTransition();
+   const [error, setError] = useState<string | null>(null);
++  // Revize cevabı: çalışan yeniden gönderirken "şunu düzelttim" notu ekleyebilir.
++  const [replyNote, setReplyNote] = useState("");
+ 
+   function run(action: () => Promise<void>) {
+     setError(null);
+@@ -69,29 +67,43 @@ export function TaskStatusActions({
+     return null;
+   }
+ 
++  // Durum ilerletme (Başladım / Tamamladım / Yeniden Gönder) yalnızca görevin
++  // atandığı kişiye aittir; yönetici işi onay panelinden yürütür. Yönetici
++  // başkasının görevinde bu butonları görmez (2026-07-14 ürün kararı).
++  if (!isAssignee) {
++    return null;
++  }
++
+   const primaryLabel = status === "revision" ? "Yeniden Gönder" : "Tamamladım";
+ 
+   return (
+     <ActionWrapper error={error}>
+       {status === "revision" && (
+-        <p className="w-full text-sm text-rose-800">
+-          Revize istendi. Aşağıdaki geçmişteki notu uygulayıp yeniden gönderin.
+-        </p>
+-      )}
+-      {(status === "todo" || status === "revision") && (
+-        <button
+-          type="button"
+-          disabled={isPending}
+-          onClick={() => run(() => startTask(taskId))}
+-          className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
+-        >
+-          Başladım
+-        </button>
++        <div className="w-full space-y-2">
++          <p className="text-sm text-rose-800">
++            Revize istendi. Aşağıdaki geçmişteki notu uygulayıp yeniden
++            gönderin.
++          </p>
++          <textarea
++            rows={2}
++            value={replyNote}
++            onChange={(e) => setReplyNote(e.target.value)}
++            placeholder="Cevabınız (isteğe bağlı): neyi değiştirdiniz?"
++            className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:ring-2 focus:ring-ring"
++          />
++        </div>
+       )}
+       <button
+         type="button"
+         disabled={isPending}
+-        onClick={() => run(() => submitForApproval(taskId))}
++        onClick={() =>
++          run(() =>
++            submitForApproval(
++              taskId,
++              status === "revision" ? replyNote : undefined
++            )
++          )
++        }
+         className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+       >
+         {primaryLabel}
+diff --git a/lib/actions/notifications.ts b/lib/actions/notifications.ts
+index 8df5898..deb8663 100644
+--- a/lib/actions/notifications.ts
++++ b/lib/actions/notifications.ts
+@@ -9,7 +9,9 @@ import { createClient } from "@/lib/supabase/server";
+ export async function markNotificationRead(id: string) {
+   const supabase = await createClient();
+   await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+-  revalidatePath("/notifications");
++  // "layout": rozet sayacı AppNav'da (tüm sayfaların layout'u) yaşadığı için
++  // yalnızca /notifications değil tüm ağaç tazelenmeli.
++  revalidatePath("/", "layout");
+ }
+ 
+ export async function markAllNotificationsRead() {
+@@ -28,5 +30,5 @@ export async function markAllNotificationsRead() {
+     .eq("user_id", user.id)
+     .eq("is_read", false);
+ 
+-  revalidatePath("/notifications");
++  revalidatePath("/", "layout");
+ }
+diff --git a/lib/actions/tasks.ts b/lib/actions/tasks.ts
+index 7bdfc29..685e321 100644
+--- a/lib/actions/tasks.ts
++++ b/lib/actions/tasks.ts
+@@ -177,9 +177,11 @@ export async function deleteTask(taskId: string) {
+ 
+ // =========================================================
+ // Onay + revize akışı (PLAN.md #11.1 güncellendi: onay akışı VAR).
+-// todo/in_progress/revision --(çalışan: submit)--> awaiting_approval
++// todo/revision --(çalışan: Tamamladım)--> awaiting_approval
+ // awaiting_approval --(admin: approve)--> done
+ // awaiting_approval --(admin: requestRevision + not)--> revision
++// "Başladım" adımı kaldırıldı (2026-07-14): in_progress durumu yalnızca
++// eski kayıtların görüntülenmesi için tanınır; yeni geçiş üretilmez.
+ // =========================================================
+ 
+ // Ortak: oturumdaki kullanıcı + görev + admin bilgisini yükler.
+@@ -195,7 +197,7 @@ async function loadTaskActor(taskId: string) {
+ 
+   const { data: task } = await supabase
+     .from("tasks")
+-    .select("id, project_id, title, status, assignee_id")
++    .select("id, project_id, title, status, assignee_id, created_by")
+     .eq("id", taskId)
+     .single();
+ 
+@@ -212,41 +214,43 @@ async function loadTaskActor(taskId: string) {
+   return { supabase, user, task, isAdmin: profile?.system_role === "admin" };
+ }
+ 
++// Çalışan aksiyonlarının (başladı/onaya gönderdi) bildirim alıcısı: görevi
++// atayan yönetici (ürün kararı 2026-07-14: tüm yöneticiler DEĞİL). Atayan
++// silinmişse (created_by null) tüm yöneticilere düşer; işlemi yapanın
++// kendisine bildirim gitmez. Görünürlük değişmez: tüm yöneticiler tüm
++// görevleri görmeye devam eder (RLS).
++async function assignerRecipients(
++  createdBy: string | null,
++  actorId: string
++): Promise<string[]> {
++  let ids: string[];
++  if (createdBy) {
++    ids = [createdBy];
++  } else {
++    const { data: admins } = await createAdminClient()
++      .from("profiles")
++      .select("id")
++      .eq("system_role", "admin");
++    ids = (admins ?? []).map((a) => a.id);
++  }
++  return ids.filter((id) => id !== actorId);
++}
++
+ function revalidateTask(taskId: string, projectId: string) {
+   revalidatePath("/");
+   revalidatePath(`/tasks/${taskId}`);
+   revalidatePath(`/projects/${projectId}`);
+   revalidatePath("/admin"); // Yönetim hub'ındaki "Onay Bekleyenler" listesi güncel kalsın.
+-  revalidatePath("/admin/calendar");
+   revalidatePath("/admin/people");
++  revalidatePath("/admin/calendar");
+   revalidatePath("/calendar");
+ }
+ 
+-// Çalışan (veya admin): görevi çalışmaya başla. todo/revision -> in_progress.
+-export async function startTask(taskId: string) {
+-  const { supabase, user, task, isAdmin } = await loadTaskActor(taskId);
+-
+-  if (!isAdmin && task.assignee_id !== user.id) {
+-    throw new Error("Bu görevi güncelleme yetkiniz yok.");
+-  }
+-  if (task.status !== "todo" && task.status !== "revision") {
+-    throw new Error("Görev şu anda başlatılabilir durumda değil.");
+-  }
+-
+-  const { error } = await supabase
+-    .from("tasks")
+-    .update({ status: "in_progress" })
+-    .eq("id", taskId);
+-  if (error) {
+-    throw new Error("Görev güncellenemedi.");
+-  }
+-
+-  revalidateTask(taskId, task.project_id);
+-}
+-
+ // Çalışan (veya admin): "Tamamladım" — görevi yönetici onayına gönderir.
+ // completed_at burada set EDİLMEZ; yalnızca onayda set edilir.
+-export async function submitForApproval(taskId: string) {
++// note: isteğe bağlı cevap (özellikle revize sonrası "şunu düzelttim" notu);
++// geçmişte çalışanın satırında görünür ve yöneticiye giden bildirimde yer alır.
++export async function submitForApproval(taskId: string, note?: string) {
+   const { supabase, user, task, isAdmin } = await loadTaskActor(taskId);
+ 
+   if (!isAdmin && task.assignee_id !== user.id) {
+@@ -260,6 +264,8 @@ export async function submitForApproval(taskId: string) {
+     throw new Error("Görev şu anda onaya gönderilemez.");
+   }
+ 
++  const trimmedNote = note?.trim() || null;
++
+   const { error } = await supabase
+     .from("tasks")
+     .update({ status: "awaiting_approval" })
+@@ -269,33 +275,34 @@ export async function submitForApproval(taskId: string) {
+   }
+ 
+   // Geçmişe "onaya gönderildi" kaydı (append-only).
+-  await supabase
+-    .from("task_revisions")
+-    .insert({ task_id: taskId, author_id: user.id, kind: "submitted" });
++  await supabase.from("task_revisions").insert({
++    task_id: taskId,
++    author_id: user.id,
++    kind: "submitted",
++    note: trimmedNote,
++  });
+ 
+-  // Onay bekleyen görevi tüm yöneticilere bildir (gönderenin kendisi hariç).
+-  const adminClient = createAdminClient();
+-  const { data: admins } = await adminClient
+-    .from("profiles")
+-    .select("id")
+-    .eq("system_role", "admin");
+-  const recipients = (admins ?? []).filter((a) => a.id !== user.id);
++  // Onay bekleyen görevi atayan yöneticiye bildir (gönderenin kendisi hariç).
++  const recipients = await assignerRecipients(task.created_by, user.id);
+ 
+   if (recipients.length > 0) {
+-    await adminClient.from("notifications").insert(
+-      recipients.map((a) => ({
+-        user_id: a.id,
++    const notifBody = trimmedNote
++      ? `${task.title} — ${trimmedNote}`
++      : task.title;
++    await createAdminClient().from("notifications").insert(
++      recipients.map((id) => ({
++        user_id: id,
+         type: "task_submitted" as const,
+         title: "Görev onayınızı bekliyor",
+-        body: task.title,
++        body: notifBody,
+         task_id: task.id,
+       }))
+     );
+     await Promise.all(
+-      recipients.map((a) =>
+-        sendPushToUser(a.id, {
++      recipients.map((id) =>
++        sendPushToUser(id, {
+           title: "Görev onayınızı bekliyor",
+-          body: task.title,
++          body: notifBody,
+           taskId: task.id,
+         })
+       )
+diff --git a/lib/hooks/use-unread-notifications.ts b/lib/hooks/use-unread-notifications.ts
+index 37dede1..6322f7b 100644
+--- a/lib/hooks/use-unread-notifications.ts
++++ b/lib/hooks/use-unread-notifications.ts
+@@ -12,6 +12,18 @@ export function useUnreadNotifications(userId: string, initialUnreadIds: string[
+     () => new Set(initialUnreadIds)
+   );
+ 
++  // Sunucu yeniden render edilince (örn. "Tümünü okundu işaretle" sonrası
++  // revalidate) güncel listeyi state'e yansıt; realtime olayı gelmese bile
++  // rozet düşsün. İçerik karşılaştırması string anahtarla yapılır (dizi
++  // referansı her render'da değişir); prop değişimi render sırasında
++  // yakalanır (React'in "adjusting state when props change" deseni).
++  const initialKey = initialUnreadIds.join(",");
++  const [prevKey, setPrevKey] = useState(initialKey);
++  if (prevKey !== initialKey) {
++    setPrevKey(initialKey);
++    setUnreadIds(new Set(initialUnreadIds));
++  }
++
+   useEffect(() => {
+     const supabase = createClient();
+     const channel = supabase
+diff --git a/lib/palette.ts b/lib/palette.ts
+new file mode 100644
+index 0000000..93d91be
+--- /dev/null
++++ b/lib/palette.ts
+@@ -0,0 +1,70 @@
++// Proje ve kişilere kalıcı, deterministik renk atar: aynı id her zaman aynı
++// rengi alır (id üzerinden hash). Sidebar proje ikonları, kişi avatarları ve
++// proje kartı şeritleri bu paleti paylaşır.
++
++export type PaletteEntry = {
++  dot: string; // küçük renk noktası
++  chip: string; // avatar / yumuşak zeminli rozet
++  icon: string; // ikon rengi
++  accent: string; // kart sol şeridi (border-l-*)
++};
++
++const palette: PaletteEntry[] = [
++  {
++    dot: "bg-indigo-500",
++    chip: "bg-indigo-100 text-indigo-700",
++    icon: "text-indigo-500",
++    accent: "border-l-indigo-400",
++  },
++  {
++    dot: "bg-sky-500",
++    chip: "bg-sky-100 text-sky-700",
++    icon: "text-sky-500",
++    accent: "border-l-sky-400",
++  },
++  {
++    dot: "bg-emerald-500",
++    chip: "bg-emerald-100 text-emerald-700",
++    icon: "text-emerald-500",
++    accent: "border-l-emerald-400",
++  },
++  {
++    dot: "bg-amber-500",
++    chip: "bg-amber-100 text-amber-800",
++    icon: "text-amber-500",
++    accent: "border-l-amber-400",
++  },
++  {
++    dot: "bg-rose-500",
++    chip: "bg-rose-100 text-rose-700",
++    icon: "text-rose-500",
++    accent: "border-l-rose-400",
++  },
++  {
++    dot: "bg-violet-500",
++    chip: "bg-violet-100 text-violet-700",
++    icon: "text-violet-500",
++    accent: "border-l-violet-400",
++  },
++  {
++    dot: "bg-teal-500",
++    chip: "bg-teal-100 text-teal-700",
++    icon: "text-teal-500",
++    accent: "border-l-teal-400",
++  },
++  {
++    dot: "bg-orange-500",
++    chip: "bg-orange-100 text-orange-800",
++    icon: "text-orange-500",
++    accent: "border-l-orange-400",
++  },
++];
++
++export function colorFor(key: string | null | undefined): PaletteEntry {
++  if (!key) return palette[0];
++  let hash = 0;
++  for (let i = 0; i < key.length; i++) {
++    hash = (hash * 31 + key.charCodeAt(i)) | 0;
++  }
++  return palette[Math.abs(hash) % palette.length];
++}
+diff --git a/lib/task-labels.ts b/lib/task-labels.ts
+index 4eee7ca..0d4d520 100644
+--- a/lib/task-labels.ts
++++ b/lib/task-labels.ts
+@@ -32,9 +32,27 @@ export const statusBadgeClass: Record<TaskStatus, string> = {
+   done: "bg-emerald-100 text-emerald-800",
+ };
+ 
++// Bölüm başlıklarındaki renk noktaları; rozetlerle aynı renk ailesi
++export const statusDotClass: Record<TaskStatus, string> = {
++  todo: "bg-amber-500",
++  in_progress: "bg-blue-500",
++  awaiting_approval: "bg-violet-500",
++  revision: "bg-rose-500",
++  done: "bg-emerald-500",
++};
++
+ export const priorityBadgeClass: Record<TaskPriority, string> = {
+   low: "bg-muted text-muted-foreground",
+   normal: "bg-secondary text-secondary-foreground",
+   high: "bg-orange-100 text-orange-800",
+   urgent: "bg-red-100 text-red-700",
+ };
++
++// Görev kartının sol kenar şeridi: rozeti okumadan önceliği sezdirir.
++// hover: kopyaları, karttaki hover:border-ring/40'ın şeridi ezmemesi için.
++export const priorityAccentClass: Record<TaskPriority, string> = {
++  low: "border-l-slate-300 hover:border-l-slate-300",
++  normal: "border-l-indigo-300 hover:border-l-indigo-300",
++  high: "border-l-orange-400 hover:border-l-orange-400",
++  urgent: "border-l-red-500 hover:border-l-red-500",
++};
