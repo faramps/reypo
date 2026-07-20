@@ -61,8 +61,10 @@ type Deck = {
 };
 
 /** A switch stuck loading this long is aborted (and retried) — the current
-    reel keeps playing instead of the screen sitting in limbo. */
-const LOAD_TIMEOUT_S = 2.5;
+    reel keeps playing instead of the screen sitting in limbo. Roomier than the
+    old 2.5s because an HLS switch fetches a manifest + first segment (heavier
+    than the mp4 faststart it replaced), so a healthy switch needs a beat longer. */
+const LOAD_TIMEOUT_S = 4;
 
 /**
  * The VIDEO screen — the centred DOM surface the lens throws the showreel onto
@@ -241,6 +243,10 @@ export default function ProjectionOverlay() {
             capLevelToPlayerSize: true, // never fetch a rendition bigger than the screen
             maxBufferLength: 20,
             startLevel: -1, // let ABR pick the opening rendition from bandwidth
+            // every reel is VOD from the top — force each loadSource to start at 0
+            // so a slot reused for a SHORTER reel never inherits the previous
+            // reel's currentTime (which would stall the switch and revert it)
+            startPosition: 0,
           });
           hls.attachMedia(v);
           hls.on(Hls.Events.ERROR, (_evt, data) => {
@@ -263,6 +269,15 @@ export default function ProjectionOverlay() {
         if (hlsSrc[slot] !== c.src) {
           hlsSrc[slot] = c.src;
           v.dataset.src = c.src;
+          // reset this reused element's stale playhead before the new source
+          // loads — hls.loadSource() (unlike a plain <video> load()) leaves
+          // currentTime where the previous reel stopped, so switching INTO a
+          // shorter reel could never buffer a frame there and the switch stalled.
+          try {
+            v.currentTime = 0;
+          } catch {
+            /* not seekable yet */
+          }
           hls.loadSource(c.src);
         } else {
           rewindIfNeeded(v);
