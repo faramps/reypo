@@ -33,7 +33,7 @@ function formatLongDate(dateStr: string) {
 }
 
 // Aylık takvim ızgarası (salt-okunur). Admin, seçili gün için bir form eklemek
-// üzere renderFooter geçirir; kullanıcı takviminde renderFooter yoktur.
+// üzere renderFooter geçirir (Atama Takvimi'nde güne görev atama paneli).
 export function TaskCalendar({
   title,
   subtitle,
@@ -117,7 +117,9 @@ export function TaskCalendar({
                 onClick={() => setSelectedDate(d.date)}
                 className={`flex min-h-20 flex-col gap-1 border-b border-r border-border p-1.5 text-left align-top transition-colors last:border-r-0 hover:bg-accent/40 ${
                   d.inMonth ? "" : "bg-muted/30 text-muted-foreground"
-                } ${isSelected ? "ring-2 ring-inset ring-ring" : ""}`}
+                } ${d.isToday ? "bg-accent/50" : ""} ${
+                  isSelected ? "ring-2 ring-inset ring-ring" : ""
+                }`}
               >
                 <span
                   className={`inline-flex h-6 w-6 items-center justify-center self-start rounded-full text-xs ${

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCurrentProfile } from "@/lib/supabase/current-profile";
 import { ProjectForm } from "@/components/projects/project-form";
+import { colorFor } from "@/lib/entity-palette";
 
 export default async function ProjectsPage() {
   const { supabase, profile } = await getCurrentProfile();
@@ -34,7 +35,13 @@ export default async function ProjectsPage() {
               href={`/app/projects/${project.id}`}
               className="block rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:border-ring/40 hover:shadow-sm"
             >
-              <span className="break-words font-medium">{project.name}</span>
+              <span className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${colorFor(project.id).dot}`}
+                />
+                <span className="break-words font-medium">{project.name}</span>
+              </span>
               {project.description && (
                 <p className="mt-1 break-words text-sm text-muted-foreground">
                   {project.description}

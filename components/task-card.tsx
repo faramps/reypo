@@ -1,16 +1,20 @@
 import Link from "next/link";
 import {
+  priorityAccentClass,
   priorityBadgeClass,
   priorityLabel,
   statusBadgeClass,
   statusLabel,
 } from "@/lib/task-labels";
 import { formatDate, isOverdue } from "@/lib/format";
+import { TaskQuickActions } from "@/components/tasks/task-quick-actions";
 import type { TaskPriority, TaskStatus } from "@/lib/supabase/types";
 
 export function TaskCard({
   task,
   meta,
+  revisionNote,
+  quickActions = false,
 }: {
   task: {
     id: string;
@@ -23,13 +27,17 @@ export function TaskCard({
   // Bağlama göre çağıran belirler: proje detayında atanan kişi adı,
   // "Görevlerim"de proje adı gösterilir.
   meta?: string;
+  // Revize istenen görevde yöneticinin son notu; detaya girmeden görünsün.
+  revisionNote?: string;
+  // Karttan detaya girmeden durum ilerletme butonları (yalnızca atananın
+  // kendi listesinde açılır; yönetici görünümlerinde kapalı kalır).
+  quickActions?: boolean;
 }) {
   return (
-    <li>
-      <Link
-        href={`/app/tasks/${task.id}`}
-        className="block rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:border-ring/40 hover:shadow-sm"
-      >
+    <li
+      className={`rounded-xl border border-l-4 border-border bg-card shadow-xs transition-all hover:border-ring/40 hover:shadow-sm ${priorityAccentClass[task.priority]}`}
+    >
+      <Link href={`/app/tasks/${task.id}`} className="block p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="min-w-0 truncate font-medium">{task.title}</span>
           <span
@@ -57,7 +65,15 @@ export function TaskCard({
             <span>Son tarih: {formatDate(task.due_date)}</span>
           )}
         </div>
+        {revisionNote && (
+          <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+            <span className="font-medium">Revize notu:</span> {revisionNote}
+          </p>
+        )}
       </Link>
+      {quickActions && (
+        <TaskQuickActions taskId={task.id} status={task.status} />
+      )}
     </li>
   );
 }

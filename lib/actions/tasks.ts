@@ -179,9 +179,11 @@ export async function deleteTask(taskId: string) {
 
 // =========================================================
 // Onay + revize akışı (PLAN.md #11.1 güncellendi: onay akışı VAR).
-// todo/in_progress/revision --(çalışan: submit)--> awaiting_approval
+// todo/revision --(çalışan: Tamamladım)--> awaiting_approval
 // awaiting_approval --(admin: approve)--> done
 // awaiting_approval --(admin: requestRevision + not)--> revision
+// "Başladım" adımı kaldırıldı (2026-07-14): in_progress durumu yalnızca
+// eski kayıtların görüntülenmesi için tanınır; yeni geçiş üretilmez.
 // =========================================================
 
 // Ortak: oturumdaki kullanıcı + görev + admin bilgisini yükler.
@@ -197,7 +199,7 @@ async function loadTaskActor(taskId: string) {
 
   const { data: task } = await supabase
     .from("tasks")
-    .select("id, project_id, title, status, assignee_id")
+    .select("id, project_id, title, status, assignee_id, created_by")
     .eq("id", taskId)
     .single();
 
@@ -214,41 +216,43 @@ async function loadTaskActor(taskId: string) {
   return { supabase, user, task, isAdmin: profile?.system_role === "admin" };
 }
 
+// Çalışan aksiyonlarının (başladı/onaya gönderdi) bildirim alıcısı: görevi
+// atayan yönetici (ürün kararı 2026-07-14: tüm yöneticiler DEĞİL). Atayan
+// silinmişse (created_by null) tüm yöneticilere düşer; işlemi yapanın
+// kendisine bildirim gitmez. Görünürlük değişmez: tüm yöneticiler tüm
+// görevleri görmeye devam eder (RLS).
+async function assignerRecipients(
+  createdBy: string | null,
+  actorId: string
+): Promise<string[]> {
+  let ids: string[];
+  if (createdBy) {
+    ids = [createdBy];
+  } else {
+    const { data: admins } = await createAdminClient()
+      .from("profiles")
+      .select("id")
+      .eq("system_role", "admin");
+    ids = (admins ?? []).map((a) => a.id);
+  }
+  return ids.filter((id) => id !== actorId);
+}
+
 function revalidateTask(taskId: string, projectId: string) {
   revalidatePath("/app");
   revalidatePath(`/app/tasks/${taskId}`);
   revalidatePath(`/app/projects/${projectId}`);
   revalidatePath("/app/admin"); // Yönetim hub'ındaki "Onay Bekleyenler" listesi güncel kalsın.
-  revalidatePath("/app/admin/calendar");
   revalidatePath("/app/admin/people");
+  revalidatePath("/app/admin/calendar");
   revalidatePath("/app/calendar");
-}
-
-// Çalışan (veya admin): görevi çalışmaya başla. todo/revision -> in_progress.
-export async function startTask(taskId: string) {
-  const { supabase, user, task, isAdmin } = await loadTaskActor(taskId);
-
-  if (!isAdmin && task.assignee_id !== user.id) {
-    throw new Error("Bu görevi güncelleme yetkiniz yok.");
-  }
-  if (task.status !== "todo" && task.status !== "revision") {
-    throw new Error("Görev şu anda başlatılabilir durumda değil.");
-  }
-
-  const { error } = await supabase
-    .from("tasks")
-    .update({ status: "in_progress" })
-    .eq("id", taskId);
-  if (error) {
-    throw new Error("Görev güncellenemedi.");
-  }
-
-  revalidateTask(taskId, task.project_id);
 }
 
 // Çalışan (veya admin): "Tamamladım" — görevi yönetici onayına gönderir.
 // completed_at burada set EDİLMEZ; yalnızca onayda set edilir.
-export async function submitForApproval(taskId: string) {
+// note: isteğe bağlı cevap (özellikle revize sonrası "şunu düzelttim" notu);
+// geçmişte çalışanın satırında görünür ve yöneticiye giden bildirimde yer alır.
+export async function submitForApproval(taskId: string, note?: string) {
   const { supabase, user, task, isAdmin } = await loadTaskActor(taskId);
 
   if (!isAdmin && task.assignee_id !== user.id) {
@@ -262,6 +266,8 @@ export async function submitForApproval(taskId: string) {
     throw new Error("Görev şu anda onaya gönderilemez.");
   }
 
+  const trimmedNote = note?.trim() || null;
+
   const { error } = await supabase
     .from("tasks")
     .update({ status: "awaiting_approval" })
@@ -271,33 +277,34 @@ export async function submitForApproval(taskId: string) {
   }
 
   // Geçmişe "onaya gönderildi" kaydı (append-only).
-  await supabase
-    .from("task_revisions")
-    .insert({ task_id: taskId, author_id: user.id, kind: "submitted" });
+  await supabase.from("task_revisions").insert({
+    task_id: taskId,
+    author_id: user.id,
+    kind: "submitted",
+    note: trimmedNote,
+  });
 
-  // Onay bekleyen görevi tüm yöneticilere bildir (gönderenin kendisi hariç).
-  const adminClient = createAdminClient();
-  const { data: admins } = await adminClient
-    .from("profiles")
-    .select("id")
-    .eq("system_role", "admin");
-  const recipients = (admins ?? []).filter((a) => a.id !== user.id);
+  // Onay bekleyen görevi atayan yöneticiye bildir (gönderenin kendisi hariç).
+  const recipients = await assignerRecipients(task.created_by, user.id);
 
   if (recipients.length > 0) {
-    await adminClient.from("notifications").insert(
-      recipients.map((a) => ({
-        user_id: a.id,
+    const notifBody = trimmedNote
+      ? `${task.title} — ${trimmedNote}`
+      : task.title;
+    await createAdminClient().from("notifications").insert(
+      recipients.map((id) => ({
+        user_id: id,
         type: "task_submitted" as const,
         title: "Görev onayınızı bekliyor",
-        body: task.title,
+        body: notifBody,
         task_id: task.id,
       }))
     );
     await Promise.all(
-      recipients.map((a) =>
-        sendPushToUser(a.id, {
+      recipients.map((id) =>
+        sendPushToUser(id, {
           title: "Görev onayınızı bekliyor",
-          body: task.title,
+          body: notifBody,
           taskId: task.id,
         })
       )

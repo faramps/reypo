@@ -16,6 +16,7 @@ import {
   statusLabel,
 } from "@/lib/task-labels";
 import { formatDate, formatDateTime, initials, isOverdue } from "@/lib/format";
+import { colorFor } from "@/lib/entity-palette";
 
 export default async function TaskDetailPage({
   params,
@@ -166,7 +167,9 @@ export default async function TaskDetailPage({
           <div>
             <dt className="text-xs text-muted-foreground">Atanan</dt>
             <dd className="mt-1 flex items-center gap-2">
-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-secondary text-[10px] font-semibold text-secondary-foreground">
+              <span
+                className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${colorFor(task.assignee_id).chip}`}
+              >
                 {initials(assigneeName === "—" ? "" : assigneeName)}
               </span>
               <span className="truncate">{assigneeName}</span>

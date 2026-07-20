@@ -63,7 +63,7 @@ export default async function AppLayout({
         {/* Mobil üst bar; masaüstünde sidebar bu bilgileri taşıdığı için gizli */}
         <header className="flex items-center justify-between border-b border-border bg-background px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:hidden">
           <div className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
+            <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-bold text-white">
               G
             </span>
             <span className="text-sm font-semibold">Görev Takip</span>

@@ -7,6 +7,7 @@ import {
   statusLabel,
 } from "@/lib/task-labels";
 import { initials } from "@/lib/format";
+import { colorFor } from "@/lib/entity-palette";
 import type { TaskStatus } from "@/lib/supabase/types";
 
 // Kişi kartında görevleri "aksiyon isteyen"den sona doğru sırala.
@@ -119,7 +120,9 @@ export default async function AdminPeoplePage() {
             className="rounded-xl border border-border bg-card p-4 shadow-xs"
           >
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
+              <span
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-xs font-semibold ${colorFor(person.id).chip}`}
+              >
                 {initials(person.name)}
               </span>
               <div className="min-w-0 flex-1">

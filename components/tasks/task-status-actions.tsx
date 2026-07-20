@@ -2,11 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { RotateCcw } from "lucide-react";
-import {
-  startTask,
-  submitForApproval,
-  reopenTask,
-} from "@/lib/actions/tasks";
+import { submitForApproval, reopenTask } from "@/lib/actions/tasks";
 import type { TaskStatus } from "@/lib/supabase/types";
 
 // Çalışan (atanan kişi) tarafı: durumu ilerletme butonları.
@@ -25,6 +21,8 @@ export function TaskStatusActions({
 }) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Revize cevabı: çalışan yeniden gönderirken "şunu düzelttim" notu ekleyebilir.
+  const [replyNote, setReplyNote] = useState("");
 
   function run(action: () => Promise<void>) {
     setError(null);
@@ -69,29 +67,43 @@ export function TaskStatusActions({
     return null;
   }
 
+  // Durum ilerletme (Başladım / Tamamladım / Yeniden Gönder) yalnızca görevin
+  // atandığı kişiye aittir; yönetici işi onay panelinden yürütür. Yönetici
+  // başkasının görevinde bu butonları görmez (2026-07-14 ürün kararı).
+  if (!isAssignee) {
+    return null;
+  }
+
   const primaryLabel = status === "revision" ? "Yeniden Gönder" : "Tamamladım";
 
   return (
     <ActionWrapper error={error}>
       {status === "revision" && (
-        <p className="w-full text-sm text-rose-800">
-          Revize istendi. Aşağıdaki geçmişteki notu uygulayıp yeniden gönderin.
-        </p>
-      )}
-      {(status === "todo" || status === "revision") && (
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={() => run(() => startTask(taskId))}
-          className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50"
-        >
-          Başladım
-        </button>
+        <div className="w-full space-y-2">
+          <p className="text-sm text-rose-800">
+            Revize istendi. Aşağıdaki geçmişteki notu uygulayıp yeniden
+            gönderin.
+          </p>
+          <textarea
+            rows={2}
+            value={replyNote}
+            onChange={(e) => setReplyNote(e.target.value)}
+            placeholder="Cevabınız (isteğe bağlı): neyi değiştirdiniz?"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-base outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
       )}
       <button
         type="button"
         disabled={isPending}
-        onClick={() => run(() => submitForApproval(taskId))}
+        onClick={() =>
+          run(() =>
+            submitForApproval(
+              taskId,
+              status === "revision" ? replyNote : undefined
+            )
+          )
+        }
         className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
       >
         {primaryLabel}

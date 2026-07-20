@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/supabase/current-profile";
 import { TaskCalendar, type CalDay, type CalTask } from "@/components/task-calendar";
 
 function pad(n: number) {
@@ -14,13 +14,17 @@ export default async function MyCalendarPage({
 }: {
   searchParams: Promise<{ month?: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user, profile } = await getCurrentProfile();
 
   if (!user) {
     redirect("/login");
+  }
+
+  // Bu takvim çalışan görünümüdür (kendine atanan görevler); yönetici
+  // kendine görev alamadığı için burası ona hep boş görünür — Atama
+  // Takvimi'ne yönlendirilir (2026-07-14 ürün kararı).
+  if (profile?.system_role === "admin") {
+    redirect("/admin/calendar");
   }
 
   const { month: monthParam } = await searchParams;

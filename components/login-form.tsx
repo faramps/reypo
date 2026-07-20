@@ -16,7 +16,7 @@ export function LoginForm() {
         className="w-full max-w-sm space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
       >
         <div className="space-y-2 text-center">
-          <span className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-primary text-base font-bold text-primary-foreground">
+          <span className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-base font-bold text-white">
             G
           </span>
           <h1 className="text-xl font-semibold">Görev Takip</h1>

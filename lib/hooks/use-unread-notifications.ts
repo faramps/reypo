@@ -12,6 +12,18 @@ export function useUnreadNotifications(userId: string, initialUnreadIds: string[
     () => new Set(initialUnreadIds)
   );
 
+  // Sunucu yeniden render edilince (örn. "Tümünü okundu işaretle" sonrası
+  // revalidate) güncel listeyi state'e yansıt; realtime olayı gelmese bile
+  // rozet düşsün. İçerik karşılaştırması string anahtarla yapılır (dizi
+  // referansı her render'da değişir); prop değişimi render sırasında
+  // yakalanır (React'in "adjusting state when props change" deseni).
+  const initialKey = initialUnreadIds.join(",");
+  const [prevKey, setPrevKey] = useState(initialKey);
+  if (prevKey !== initialKey) {
+    setPrevKey(initialKey);
+    setUnreadIds(new Set(initialUnreadIds));
+  }
+
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase

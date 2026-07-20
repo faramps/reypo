@@ -32,9 +32,27 @@ export const statusBadgeClass: Record<TaskStatus, string> = {
   done: "bg-emerald-100 text-emerald-800",
 };
 
+// Bölüm başlıklarındaki renk noktaları; rozetlerle aynı renk ailesi
+export const statusDotClass: Record<TaskStatus, string> = {
+  todo: "bg-amber-500",
+  in_progress: "bg-blue-500",
+  awaiting_approval: "bg-violet-500",
+  revision: "bg-rose-500",
+  done: "bg-emerald-500",
+};
+
 export const priorityBadgeClass: Record<TaskPriority, string> = {
   low: "bg-muted text-muted-foreground",
   normal: "bg-secondary text-secondary-foreground",
   high: "bg-orange-100 text-orange-800",
   urgent: "bg-red-100 text-red-700",
+};
+
+// Görev kartının sol kenar şeridi: rozeti okumadan önceliği sezdirir.
+// hover: kopyaları, karttaki hover:border-ring/40'ın şeridi ezmemesi için.
+export const priorityAccentClass: Record<TaskPriority, string> = {
+  low: "border-l-slate-300 hover:border-l-slate-300",
+  normal: "border-l-indigo-300 hover:border-l-indigo-300",
+  high: "border-l-orange-400 hover:border-l-orange-400",
+  urgent: "border-l-red-500 hover:border-l-red-500",
 };

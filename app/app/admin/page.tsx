@@ -3,6 +3,7 @@ import {
   CalendarDays,
   ContactRound,
   FolderKanban,
+  ListChecks,
   Tags,
   Users,
   type LucideIcon,
@@ -15,12 +16,44 @@ import {
   type PendingItem,
 } from "@/components/admin/pending-approvals";
 
-const shortcuts: { label: string; href: string; icon: LucideIcon }[] = [
-  { label: "Atama Takvimi", href: "/app/admin/calendar", icon: CalendarDays },
-  { label: "Kişi Görevleri", href: "/app/admin/people", icon: ContactRound },
-  { label: "Projeler", href: "/app/projects", icon: FolderKanban },
-  { label: "İş Rolleri", href: "/app/admin/roles", icon: Tags },
-  { label: "Kullanıcılar", href: "/app/admin/users", icon: Users },
+// Her kısayolun kendi rengi: ikonlar tek tip gri yerine yumuşak renkli
+// çiplerde, hangi kısayolun ne olduğu bir bakışta ayrışır.
+const shortcuts: {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  chip: string;
+}[] = [
+  {
+    label: "Atama Takvimi",
+    href: "/app/admin/calendar",
+    icon: CalendarDays,
+    chip: "bg-sky-100 text-sky-700",
+  },
+  {
+    label: "Kişi Görevleri",
+    href: "/app/admin/people",
+    icon: ContactRound,
+    chip: "bg-violet-100 text-violet-700",
+  },
+  {
+    label: "Projeler",
+    href: "/app/projects",
+    icon: FolderKanban,
+    chip: "bg-amber-100 text-amber-800",
+  },
+  {
+    label: "İş Rolleri",
+    href: "/app/admin/roles",
+    icon: Tags,
+    chip: "bg-rose-100 text-rose-700",
+  },
+  {
+    label: "Kullanıcılar",
+    href: "/app/admin/users",
+    icon: Users,
+    chip: "bg-indigo-100 text-indigo-700",
+  },
 ];
 
 export default async function AdminOverviewPage() {
@@ -90,12 +123,34 @@ export default async function AdminOverviewPage() {
     .filter((p) => !p.is_archived)
     .map((p) => ({ id: p.id, name: p.name }));
 
-  const stats = [
-    { label: "Kullanıcı", value: userCount ?? 0 },
-    { label: "Proje", value: projectCount ?? 0 },
+  const stats: {
+    label: string;
+    value: number;
+    icon: LucideIcon;
+    chip: string;
+    href: string;
+    detail?: string;
+  }[] = [
+    {
+      label: "Kullanıcı",
+      value: userCount ?? 0,
+      icon: Users,
+      chip: "bg-indigo-100 text-indigo-700",
+      href: "/admin/users",
+    },
+    {
+      label: "Proje",
+      value: projectCount ?? 0,
+      icon: FolderKanban,
+      chip: "bg-sky-100 text-sky-700",
+      href: "/projects",
+    },
     {
       label: "Görev",
       value: taskCount ?? 0,
+      icon: ListChecks,
+      chip: "bg-emerald-100 text-emerald-700",
+      href: "/admin/people",
       detail: `${doneCount ?? 0} tamamlandı`,
     },
   ];
@@ -105,7 +160,8 @@ export default async function AdminOverviewPage() {
       <h1 className="text-lg font-semibold">Yönetim</h1>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-medium text-muted-foreground">
+        <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <span aria-hidden className="h-2 w-2 rounded-full bg-violet-500" />
           Onay Bekleyenler{" "}
           <span className="text-muted-foreground/60">({pending.length})</span>
         </h2>
@@ -130,20 +186,31 @@ export default async function AdminOverviewPage() {
       </section>
 
       <section className="grid grid-cols-3 gap-4">
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className="rounded-xl border border-border bg-card p-4 shadow-xs"
-          >
-            <p className="text-2xl font-semibold">{stat.value}</p>
-            <p className="mt-0.5 text-sm text-muted-foreground">{stat.label}</p>
-            {stat.detail && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {stat.detail}
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <Link
+              key={stat.label}
+              href={stat.href}
+              className="block rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:border-ring/40 hover:shadow-sm"
+            >
+              <span
+                className={`grid h-8 w-8 place-items-center rounded-lg ${stat.chip}`}
+              >
+                <Icon className="h-4 w-4" />
+              </span>
+              <p className="mt-2 text-2xl font-semibold">{stat.value}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {stat.label}
               </p>
-            )}
-          </div>
-        ))}
+              {stat.detail && (
+                <p className="mt-1 text-xs font-medium text-emerald-600">
+                  {stat.detail}
+                </p>
+              )}
+            </Link>
+          );
+        })}
       </section>
 
       <section className="space-y-2">
@@ -157,7 +224,11 @@ export default async function AdminOverviewPage() {
                 href={s.href}
                 className="flex items-center gap-2.5 rounded-xl border border-border bg-card p-4 text-sm font-medium shadow-xs transition-all hover:border-ring/40 hover:shadow-sm"
               >
-                <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <span
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${s.chip}`}
+                >
+                  <Icon className="h-4.5 w-4.5" />
+                </span>
                 {s.label}
               </Link>
             );
