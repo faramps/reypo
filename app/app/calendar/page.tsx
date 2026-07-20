@@ -24,7 +24,7 @@ export default async function MyCalendarPage({
   // kendine görev alamadığı için burası ona hep boş görünür — Atama
   // Takvimi'ne yönlendirilir (2026-07-14 ürün kararı).
   if (profile?.system_role === "admin") {
-    redirect("/admin/calendar");
+    redirect("/app/admin/calendar");
   }
 
   const { month: monthParam } = await searchParams;
