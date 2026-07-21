@@ -66,7 +66,7 @@ export default async function AdminCalendarPage({
   ] = await Promise.all([
     supabase
       .from("tasks")
-      .select("id, title, status, priority, assignee_id, start_date")
+      .select("id, title, status, priority, start_date")
       .not("start_date", "is", null)
       .gte("start_date", gridStartStr)
       .lte("start_date", gridEndStr),
@@ -97,6 +97,27 @@ export default async function AdminCalendarPage({
       roleId: p.role_id,
     }));
 
+  // Takvimdeki görevlerin atananları (alt başlık: isim(ler)).
+  const rangeTaskIds = (tasks ?? []).map((t) => t.id);
+  const { data: rangeAssignees } = rangeTaskIds.length
+    ? await supabase
+        .from("task_assignees")
+        .select("task_id, user_id")
+        .in("task_id", rangeTaskIds)
+    : { data: [] as { task_id: string; user_id: string }[] };
+  const namesByTask = new Map<string, string[]>();
+  for (const a of rangeAssignees ?? []) {
+    const list = namesByTask.get(a.task_id) ?? [];
+    list.push(nameById.get(a.user_id) ?? "—");
+    namesByTask.set(a.task_id, list);
+  }
+  function assigneeSubtitle(taskId: string) {
+    const names = namesByTask.get(taskId) ?? [];
+    if (names.length === 0) return "—";
+    if (names.length === 1) return names[0];
+    return `${names[0]} +${names.length - 1}`;
+  }
+
   const tasksByDate = new Map<string, CalTask[]>();
   for (const t of tasks ?? []) {
     if (!t.start_date) continue;
@@ -106,7 +127,7 @@ export default async function AdminCalendarPage({
       title: t.title,
       status: t.status,
       priority: t.priority,
-      subtitle: nameById.get(t.assignee_id) ?? "—",
+      subtitle: assigneeSubtitle(t.id),
     });
     tasksByDate.set(t.start_date, list);
   }

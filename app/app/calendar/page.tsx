@@ -59,15 +59,24 @@ export default async function MyCalendarPage({
     };
   });
 
+  // Bana atanmış satırlar (kişi bazlı alt-durum); takvimde kendi durumumu gösteririm.
+  const { data: myRows } = await supabase
+    .from("task_assignees")
+    .select("task_id, status")
+    .eq("user_id", user.id);
+  const myStatusByTask = new Map((myRows ?? []).map((r) => [r.task_id, r.status]));
+  const myTaskIds = [...myStatusByTask.keys()];
+
   const [{ data: tasks }, { data: projects }] = await Promise.all([
-    // RLS: kullanıcı zaten yalnızca kendi görevlerini görür; assignee filtresi netlik için.
-    supabase
-      .from("tasks")
-      .select("id, title, status, priority, project_id, start_date")
-      .eq("assignee_id", user.id)
-      .not("start_date", "is", null)
-      .gte("start_date", gridDates[0].date)
-      .lte("start_date", gridDates[41].date),
+    myTaskIds.length
+      ? supabase
+          .from("tasks")
+          .select("id, title, priority, project_id, start_date")
+          .in("id", myTaskIds)
+          .not("start_date", "is", null)
+          .gte("start_date", gridDates[0].date)
+          .lte("start_date", gridDates[41].date)
+      : Promise.resolve({ data: [] as never[] }),
     supabase.from("projects").select("id, name"),
   ]);
 
@@ -80,7 +89,7 @@ export default async function MyCalendarPage({
     list.push({
       id: t.id,
       title: t.title,
-      status: t.status,
+      status: myStatusByTask.get(t.id) ?? "todo",
       priority: t.priority,
       subtitle: projectNameById.get(t.project_id) ?? "",
     });

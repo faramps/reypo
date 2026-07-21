@@ -3,14 +3,16 @@
 import { useActionState, useState, useTransition } from "react";
 import { Pencil, Trash2, X } from "lucide-react";
 import { updateTask, deleteTask, type TaskState } from "@/lib/actions/tasks";
+import { AssigneeMultiSelect } from "@/components/tasks/assignee-multi-select";
 import type { TaskPriority } from "@/lib/supabase/types";
 
-type Assignee = { id: string; label: string };
+type Assignee = { id: string; label: string; roleId?: string | null };
 
 export function TaskAdminActions({
   task,
   roles,
   assignees,
+  assigneeIds,
 }: {
   task: {
     id: string;
@@ -19,11 +21,11 @@ export function TaskAdminActions({
     priority: TaskPriority;
     due_date: string | null;
     start_date: string | null;
-    assignee_id: string;
     role_id: string | null;
   };
   roles: { id: string; name: string }[];
   assignees: Assignee[];
+  assigneeIds: string[];
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [state, formAction, pending] = useActionState<TaskState, FormData>(
@@ -155,44 +157,30 @@ export function TaskAdminActions({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label htmlFor="edit_role" className="text-sm font-medium">
-                İş rolü
-              </label>
-              <select
-                id="edit_role"
-                name="role_id"
-                defaultValue={task.role_id ?? ""}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-base"
-              >
-                <option value="">— Yok —</option>
-                {roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="edit_assignee" className="text-sm font-medium">
-                Atanan kişi
-              </label>
-              <select
-                id="edit_assignee"
-                name="assignee_id"
-                required
-                defaultValue={task.assignee_id}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-base"
-              >
-                {assignees.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="space-y-1">
+            <label htmlFor="edit_role" className="text-sm font-medium">
+              İş rolü
+            </label>
+            <select
+              id="edit_role"
+              name="role_id"
+              defaultValue={task.role_id ?? ""}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-base"
+            >
+              <option value="">— Yok —</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
           </div>
+
+          <AssigneeMultiSelect
+            assignees={assignees}
+            roles={roles}
+            defaultSelected={assigneeIds}
+          />
 
           {state?.error && (
             <p className="text-sm text-destructive">{state.error}</p>

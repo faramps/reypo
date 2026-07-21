@@ -112,7 +112,6 @@ export type Database = {
           description: string | null;
           status: TaskStatus;
           priority: TaskPriority;
-          assignee_id: string;
           role_id: string | null;
           due_date: string | null;
           start_date: string | null;
@@ -128,7 +127,6 @@ export type Database = {
           description?: string | null;
           status?: TaskStatus;
           priority?: TaskPriority;
-          assignee_id: string;
           role_id?: string | null;
           due_date?: string | null;
           start_date?: string | null;
@@ -146,15 +144,44 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "tasks_assignee_id_fkey";
-            columns: ["assignee_id"];
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-          {
             foreignKeyName: "tasks_role_id_fkey";
             columns: ["role_id"];
             referencedRelation: "roles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      task_assignees: {
+        Row: {
+          id: string;
+          task_id: string;
+          user_id: string;
+          status: TaskStatus;
+          completed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          user_id: string;
+          status?: TaskStatus;
+          completed_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["task_assignees"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "task_assignees_task_id_fkey";
+            columns: ["task_id"];
+            referencedRelation: "tasks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "task_assignees_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -201,6 +228,7 @@ export type Database = {
           id: string;
           task_id: string;
           author_id: string | null;
+          target_user_id: string | null;
           kind: RevisionKind;
           note: string | null;
           created_at: string;
@@ -209,6 +237,7 @@ export type Database = {
           id?: string;
           task_id: string;
           author_id?: string | null;
+          target_user_id?: string | null;
           kind: RevisionKind;
           note?: string | null;
           created_at?: string;
@@ -224,6 +253,12 @@ export type Database = {
           {
             foreignKeyName: "task_revisions_author_id_fkey";
             columns: ["author_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "task_revisions_target_user_id_fkey";
+            columns: ["target_user_id"];
             referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
@@ -265,6 +300,10 @@ export type Database = {
     Functions: {
       is_admin: {
         Args: Record<string, never>;
+        Returns: boolean;
+      };
+      is_task_assignee: {
+        Args: { p_task: string };
         Returns: boolean;
       };
     };

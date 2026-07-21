@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createTask, type TaskState } from "@/lib/actions/tasks";
+import { AssigneeMultiSelect } from "@/components/tasks/assignee-multi-select";
 
 type Assignee = { id: string; label: string; roleId: string | null };
 
@@ -34,7 +35,6 @@ export function TaskCreateForm({
     createTask,
     undefined
   );
-  const [roleFilter, setRoleFilter] = useState("");
   const [done, setDone] = useState(false);
 
   // Başarıyı render sırasında yakala (kod tabanının effect'siz deseni).
@@ -51,12 +51,6 @@ export function TaskCreateForm({
       if (refresh) router.refresh();
     }
   }, [state, onSuccess, refresh, router]);
-
-  const filteredAssignees = useMemo(
-    () =>
-      roleFilter ? assignees.filter((a) => a.roleId === roleFilter) : assignees,
-    [assignees, roleFilter]
-  );
 
   const needsProjectSelect = !fixedProjectId;
 
@@ -186,48 +180,22 @@ export function TaskCreateForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label htmlFor="tcf_role_filter" className="text-sm font-medium">
-            İş rolüne göre filtrele
-          </label>
-          <select
-            id="tcf_role_filter"
-            name="role_id"
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className={fieldClass}
-          >
-            <option value="">Tüm roller</option>
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="tcf_assignee" className="text-sm font-medium">
-            Atanan kişi
-          </label>
-          <select
-            id="tcf_assignee"
-            name="assignee_id"
-            required
-            defaultValue=""
-            className={fieldClass}
-          >
-            <option value="" disabled>
-              Seçin
+      <div className="space-y-1">
+        <label htmlFor="tcf_role" className="text-sm font-medium">
+          İş rolü{" "}
+          <span className="font-normal text-muted-foreground">(isteğe bağlı)</span>
+        </label>
+        <select id="tcf_role" name="role_id" defaultValue="" className={fieldClass}>
+          <option value="">— Yok —</option>
+          {roles.map((role) => (
+            <option key={role.id} value={role.id}>
+              {role.name}
             </option>
-            {filteredAssignees.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.label}
-              </option>
-            ))}
-          </select>
-        </div>
+          ))}
+        </select>
       </div>
+
+      <AssigneeMultiSelect assignees={assignees} roles={roles} />
 
       {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
 

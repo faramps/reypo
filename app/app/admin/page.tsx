@@ -15,6 +15,7 @@ import {
   PendingApprovals,
   type PendingItem,
 } from "@/components/admin/pending-approvals";
+import type { TaskStatus } from "@/lib/supabase/types";
 
 // Her kısayolun kendi rengi: ikonlar tek tip gri yerine yumuşak renkli
 // çiplerde, hangi kısayolun ne olduğu bir bakışta ayrışır.
@@ -77,7 +78,7 @@ export default async function AdminOverviewPage() {
     supabase.auth.getUser(),
     supabase
       .from("tasks")
-      .select("id, title, assignee_id, project_id, updated_at")
+      .select("id, title, project_id, updated_at")
       .eq("status", "awaiting_approval")
       .order("updated_at", { ascending: true }),
     supabase.from("profiles").select("id, full_name, role_id"),
@@ -105,11 +106,34 @@ export default async function AdminOverviewPage() {
   }
   const projectNameById = new Map((projects ?? []).map((p) => [p.id, p.name]));
 
+  // Onay bekleyen görevlerin atananları (kişi bazlı revize paneli için).
+  const pendingIds = (pendingTasks ?? []).map((t) => t.id);
+  const { data: pendingAssignees } = pendingIds.length
+    ? await supabase
+        .from("task_assignees")
+        .select("task_id, user_id, status")
+        .in("task_id", pendingIds)
+    : { data: [] as { task_id: string; user_id: string; status: TaskStatus }[] };
+
+  const assigneesByTask = new Map<
+    string,
+    { userId: string; name: string; status: TaskStatus }[]
+  >();
+  for (const a of pendingAssignees ?? []) {
+    const list = assigneesByTask.get(a.task_id) ?? [];
+    list.push({
+      userId: a.user_id,
+      name: nameById.get(a.user_id) ?? "—",
+      status: a.status,
+    });
+    assigneesByTask.set(a.task_id, list);
+  }
+
   const pending: PendingItem[] = (pendingTasks ?? []).map((t) => ({
     id: t.id,
     title: t.title,
-    assigneeName: nameById.get(t.assignee_id) ?? "—",
     projectName: projectNameById.get(t.project_id) ?? "—",
+    assignees: assigneesByTask.get(t.id) ?? [],
   }));
 
   const assignees = (profiles ?? [])

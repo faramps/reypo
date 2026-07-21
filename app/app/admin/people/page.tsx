@@ -8,7 +8,7 @@ import {
 } from "@/lib/task-labels";
 import { initials } from "@/lib/format";
 import { colorFor } from "@/lib/entity-palette";
-import type { TaskStatus } from "@/lib/supabase/types";
+import type { TaskPriority, TaskStatus } from "@/lib/supabase/types";
 
 // Kişi kartında görevleri "aksiyon isteyen"den sona doğru sırala.
 const statusOrder: Record<TaskStatus, number> = {
@@ -36,7 +36,8 @@ export default async function AdminPeoplePage() {
     { data: authUsers },
     { data: profiles },
     { data: roles },
-    { data: tasks },
+    { data: taskRows },
+    { data: assigneeRows },
     { data: projects },
   ] = await Promise.all([
     adminClient.auth.admin.listUsers(),
@@ -44,22 +45,42 @@ export default async function AdminPeoplePage() {
     supabase.from("roles").select("id, name, color"),
     supabase
       .from("tasks")
-      .select("id, title, status, priority, due_date, project_id, assignee_id"),
+      .select("id, title, priority, due_date, project_id"),
+    supabase.from("task_assignees").select("task_id, user_id, status"),
     supabase.from("projects").select("id, name"),
   ]);
 
-  type TaskRow = NonNullable<typeof tasks>[number];
+  // Kart, kişinin KENDİ alt-durumunu (task_assignees.status) gösterir.
+  type TaskRow = {
+    id: string;
+    title: string;
+    status: TaskStatus;
+    priority: TaskPriority;
+    due_date: string | null;
+    project_id: string;
+  };
 
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
   const roleById = new Map((roles ?? []).map((r) => [r.id, r]));
   const projectNameById = new Map((projects ?? []).map((p) => [p.id, p.name]));
+  const taskById = new Map((taskRows ?? []).map((t) => [t.id, t]));
 
-  // Görevleri atanan kişiye göre grupla.
+  // Görevleri atanan kişiye göre grupla (bir kişi birden çok görevde olabilir);
+  // durum kişinin kendi atama satırından gelir.
   const tasksByAssignee = new Map<string, TaskRow[]>();
-  for (const task of tasks ?? []) {
-    const list = tasksByAssignee.get(task.assignee_id) ?? [];
-    list.push(task);
-    tasksByAssignee.set(task.assignee_id, list);
+  for (const a of assigneeRows ?? []) {
+    const t = taskById.get(a.task_id);
+    if (!t) continue;
+    const list = tasksByAssignee.get(a.user_id) ?? [];
+    list.push({
+      id: t.id,
+      title: t.title,
+      status: a.status,
+      priority: t.priority,
+      due_date: t.due_date,
+      project_id: t.project_id,
+    });
+    tasksByAssignee.set(a.user_id, list);
   }
 
   const people = (authUsers?.users ?? []).map((u) => {

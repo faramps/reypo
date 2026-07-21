@@ -14,6 +14,7 @@ export function TaskCard({
   task,
   meta,
   revisionNote,
+  progress,
   quickActions = false,
 }: {
   task: {
@@ -29,6 +30,8 @@ export function TaskCard({
   meta?: string;
   // Revize istenen görevde yöneticinin son notu; detaya girmeden görünsün.
   revisionNote?: string;
+  // Çok kişili görevde kaç kişi işini tamamladı (X/N). total > 1 ise gösterilir.
+  progress?: { done: number; total: number };
   // Karttan detaya girmeden durum ilerletme butonları (yalnızca atananın
   // kendi listesinde açılır; yönetici görünümlerinde kapalı kalır).
   quickActions?: boolean;
@@ -53,6 +56,11 @@ export function TaskCard({
           >
             {priorityLabel[task.priority]}
           </span>
+          {progress && progress.total > 1 && (
+            <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground">
+              {progress.done}/{progress.total} tamamladı
+            </span>
+          )}
           {isOverdue(task.due_date, task.status) && (
             <span className="rounded-full bg-red-100 px-2 py-0.5 font-medium text-red-700">
               Gecikti

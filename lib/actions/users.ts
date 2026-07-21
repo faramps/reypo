@@ -113,17 +113,17 @@ export async function deleteUser(
 
   const adminClient = createAdminClient();
 
-  // tasks.assignee_id -> profiles(id) "on delete" davranışı tanımlanmadığı için
-  // (geçmiş görev kayıtları korunsun diye bilinçli), atanmış görevi olan bir
-  // kullanıcı silinemez — burada erken ve anlaşılır bir hata veriyoruz.
+  // task_assignees.user_id -> profiles(id) "on delete" davranışı tanımlanmadığı
+  // için (RESTRICT), atanmış görevi olan bir kullanıcı silinemez — burada erken
+  // ve anlaşılır bir hata veriyoruz.
   const { count } = await adminClient
-    .from("tasks")
+    .from("task_assignees")
     .select("*", { count: "exact", head: true })
-    .eq("assignee_id", userId);
+    .eq("user_id", userId);
 
   if (count && count > 0) {
     return {
-      error: `Bu kullanıcıya atanmış ${count} görev var. Görev detay sayfasındaki "Düzenle" ile başka birine atayın veya "Sil" ile kaldırın, sonra tekrar deneyin.`,
+      error: `Bu kullanıcıya atanmış ${count} görev var. Görev detay sayfasındaki "Düzenle" ile atamalardan çıkarın veya görevi silin, sonra tekrar deneyin.`,
     };
   }
 

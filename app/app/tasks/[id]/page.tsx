@@ -17,6 +17,12 @@ import {
 } from "@/lib/task-labels";
 import { formatDate, formatDateTime, initials, isOverdue } from "@/lib/format";
 import { colorFor } from "@/lib/entity-palette";
+import type { TaskStatus } from "@/lib/supabase/types";
+
+// Bir kişi "işini tamamladı" sayılır: onaya gönderdi veya onaylandı.
+function isCompletedForProgress(status: TaskStatus) {
+  return status === "awaiting_approval" || status === "done";
+}
 
 export default async function TaskDetailPage({
   params,
@@ -35,7 +41,7 @@ export default async function TaskDetailPage({
   const { data: task } = await supabase
     .from("tasks")
     .select(
-      "id, title, description, status, priority, due_date, start_date, project_id, assignee_id, role_id, created_by, created_at, completed_at"
+      "id, title, description, status, priority, due_date, start_date, project_id, role_id, created_by, created_at, completed_at"
     )
     .eq("id", id)
     .single();
@@ -44,74 +50,82 @@ export default async function TaskDetailPage({
     notFound();
   }
 
-  const [{ data: project }, { data: role }, { data: revisionRows }] =
-    await Promise.all([
-      supabase
-        .from("projects")
-        .select("id, name")
-        .eq("id", task.project_id)
-        .single(),
-      task.role_id
-        ? supabase
-            .from("roles")
-            .select("name, color")
-            .eq("id", task.role_id)
-            .single()
-        : Promise.resolve({ data: null }),
-      // Revize/onay geçmişi (RLS: assignee veya admin görür).
-      supabase
-        .from("task_revisions")
-        .select("id, kind, note, author_id, created_at")
-        .eq("task_id", id)
-        .order("created_at", { ascending: true }),
-    ]);
+  const [
+    { data: project },
+    { data: role },
+    { data: revisionRows },
+    { data: assigneeRows },
+  ] = await Promise.all([
+    supabase.from("projects").select("id, name").eq("id", task.project_id).single(),
+    task.role_id
+      ? supabase
+          .from("roles")
+          .select("name, color")
+          .eq("id", task.role_id)
+          .single()
+      : Promise.resolve({ data: null }),
+    // Revize/onay geçmişi (RLS: assignee veya admin görür).
+    supabase
+      .from("task_revisions")
+      .select("id, kind, note, author_id, target_user_id, created_at")
+      .eq("task_id", id)
+      .order("created_at", { ascending: true }),
+    // Bu görevin atananları + kişi bazlı alt-durum.
+    supabase
+      .from("task_assignees")
+      .select("user_id, status, completed_at")
+      .eq("task_id", id),
+  ]);
 
   const isAdmin = profile?.system_role === "admin";
-  const isAssignee = task.assignee_id === user.id;
+  const myRow = (assigneeRows ?? []).find((a) => a.user_id === user.id) ?? null;
+  const isAssignee = !!myRow;
 
-  // İsim çözümlemesi için gereken tüm kişi id'leri: atanan, oluşturan, revize yazarları.
+  // İsim çözümlemesi için gereken tüm kişi id'leri.
   const personIds = Array.from(
     new Set(
       [
-        task.assignee_id,
+        ...(assigneeRows ?? []).map((a) => a.user_id),
         task.created_by,
         ...(revisionRows ?? []).map((r) => r.author_id),
+        ...(revisionRows ?? []).map((r) => r.target_user_id),
       ].filter((v): v is string => !!v)
     )
   );
 
-  const { data: people } = await supabase
-    .from("profiles")
-    .select("id, full_name")
-    .in("id", personIds);
+  const { data: people } = personIds.length
+    ? await supabase.from("profiles").select("id, full_name").in("id", personIds)
+    : { data: [] as { id: string; full_name: string }[] };
 
   const nameById = new Map((people ?? []).map((p) => [p.id, p.full_name]));
 
-  // Düzenleme paneli için (yalnızca admin): rol listesi + atanabilir kişiler + e-postalar.
-  let editRoles: { id: string; name: string }[] = [];
-  let editAssignees: { id: string; label: string }[] = [];
-  if (isAdmin) {
-    const [{ data: roleRows }, { data: profileRows }, { data: authUsers }] =
-      await Promise.all([
-        supabase.from("roles").select("id, name").order("created_at"),
-        supabase.from("profiles").select("id, full_name"),
-        createAdminClient().auth.admin.listUsers(),
-      ]);
-    const emailById = new Map(
-      (authUsers?.users ?? []).map((u) => [u.id, u.email ?? ""])
-    );
-    // İsimsiz profilleri e-postaya düşür (hem geçmiş hem detay görünümü için).
-    for (const pid of personIds) {
-      if (!nameById.get(pid)) {
-        nameById.set(pid, emailById.get(pid) ?? "");
-      }
+  // E-posta yedeği HERKES için: isimsiz eş-atananlar üyeye de "—" yerine
+  // tanımlı görünsün (küçük ofis modeli: herkes birbirini görebilir).
+  const { data: authUsers } = await createAdminClient().auth.admin.listUsers();
+  const emailById = new Map(
+    (authUsers?.users ?? []).map((u) => [u.id, u.email ?? ""])
+  );
+  for (const pid of personIds) {
+    if (!nameById.get(pid)) {
+      nameById.set(pid, emailById.get(pid) ?? "");
     }
+  }
+
+  // Düzenleme paneli için (yalnızca admin): rol listesi + atanabilir kişiler.
+  let editRoles: { id: string; name: string }[] = [];
+  let editAssignees: { id: string; label: string; roleId: string | null }[] = [];
+  if (isAdmin) {
+    const [{ data: roleRows }, { data: profileRows }] = await Promise.all([
+      supabase.from("roles").select("id, name").order("created_at"),
+      supabase.from("profiles").select("id, full_name, role_id"),
+    ]);
     editRoles = roleRows ?? [];
     editAssignees = (profileRows ?? [])
       .filter((p) => p.id !== user.id) // yönetici kendine görev atayamaz
       .map((p) => ({
         id: p.id,
         label: p.full_name || emailById.get(p.id) || "Kullanıcı",
+        roleId: p.role_id,
       }));
   }
 
@@ -123,7 +137,16 @@ export default async function TaskDetailPage({
     return "—";
   }
 
-  const assigneeName = personLabel(task.assignee_id);
+  const assignees = (assigneeRows ?? []).map((a) => ({
+    userId: a.user_id,
+    name: personLabel(a.user_id),
+    status: a.status,
+  }));
+  const doneCount = (assigneeRows ?? []).filter((a) =>
+    isCompletedForProgress(a.status)
+  ).length;
+  const totalCount = assigneeRows?.length ?? 0;
+
   const creatorName = task.created_by ? personLabel(task.created_by) : null;
   const overdue = isOverdue(task.due_date, task.status);
   const canUpdateStatus = isAdmin || isAssignee;
@@ -134,6 +157,7 @@ export default async function TaskDetailPage({
     note: r.note,
     created_at: r.created_at,
     authorName: personLabel(r.author_id),
+    targetName: r.target_user_id ? personLabel(r.target_user_id) : null,
   }));
 
   return (
@@ -164,15 +188,35 @@ export default async function TaskDetailPage({
         </p>
 
         <dl className="mt-5 grid gap-x-6 gap-y-4 border-t border-border pt-4 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs text-muted-foreground">Atanan</dt>
-            <dd className="mt-1 flex items-center gap-2">
-              <span
-                className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${colorFor(task.assignee_id).chip}`}
-              >
-                {initials(assigneeName === "—" ? "" : assigneeName)}
-              </span>
-              <span className="truncate">{assigneeName}</span>
+          <div className="sm:col-span-2">
+            <dt className="flex items-center gap-2 text-xs text-muted-foreground">
+              Atananlar
+              {totalCount > 1 && (
+                <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground">
+                  {doneCount}/{totalCount} tamamladı
+                </span>
+              )}
+            </dt>
+            <dd className="mt-2 flex flex-wrap gap-2">
+              {assignees.length === 0 && <span>—</span>}
+              {assignees.map((a) => (
+                <span
+                  key={a.userId}
+                  className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-background py-1 pl-1 pr-2.5"
+                >
+                  <span
+                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${colorFor(a.userId).chip}`}
+                  >
+                    {initials(a.name === "—" ? "" : a.name)}
+                  </span>
+                  <span className="min-w-0 truncate text-sm">{a.name}</span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadgeClass[a.status]}`}
+                  >
+                    {statusLabel[a.status]}
+                  </span>
+                </span>
+              ))}
             </dd>
           </div>
 
@@ -241,14 +285,15 @@ export default async function TaskDetailPage({
       {canUpdateStatus && (
         <TaskStatusActions
           taskId={task.id}
-          status={task.status}
+          taskStatus={task.status}
+          myStatus={myRow?.status ?? null}
           isAdmin={isAdmin}
           isAssignee={isAssignee}
         />
       )}
 
       {isAdmin && task.status === "awaiting_approval" && (
-        <TaskApprovalActions taskId={task.id} />
+        <TaskApprovalActions taskId={task.id} assignees={assignees} />
       )}
 
       <TaskRevisionHistory revisions={revisions} />
@@ -262,11 +307,11 @@ export default async function TaskDetailPage({
             priority: task.priority,
             due_date: task.due_date,
             start_date: task.start_date,
-            assignee_id: task.assignee_id,
             role_id: task.role_id,
           }}
           roles={editRoles}
           assignees={editAssignees}
+          assigneeIds={assignees.map((a) => a.userId)}
         />
       )}
     </div>

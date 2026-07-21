@@ -32,7 +32,7 @@ export default async function ProjectDetailPage({
       // RLS burada da geçerli: member sadece kendi görevlerini görür.
       supabase
         .from("tasks")
-        .select("id, title, status, priority, assignee_id, due_date")
+        .select("id, title, status, priority, due_date")
         .eq("project_id", id)
         .order("created_at", { ascending: false }),
       supabase.from("profiles").select("id, full_name, role_id"),
@@ -42,35 +42,46 @@ export default async function ProjectDetailPage({
     notFound();
   }
 
+  // Görevlerin atananları (satırda isim(ler) gösterilir).
+  const projectTaskIds = (tasks ?? []).map((t) => t.id);
+  const { data: projectAssignees } = projectTaskIds.length
+    ? await supabase
+        .from("task_assignees")
+        .select("task_id, user_id")
+        .in("task_id", projectTaskIds)
+    : { data: [] as { task_id: string; user_id: string }[] };
+  const assigneeIdsByTask = new Map<string, string[]>();
+  for (const a of projectAssignees ?? []) {
+    const list = assigneeIdsByTask.get(a.task_id) ?? [];
+    list.push(a.user_id);
+    assigneeIdsByTask.set(a.task_id, list);
+  }
+
   const nameById = new Map(
     (allProfiles ?? []).map((p) => [p.id, p.full_name])
   );
-  // Kendi görevinde isim boşsa e-postaya düş (davetli kullanıcı adını henüz
-  // belirlememiş olabilir).
-  if (user && !nameById.get(user.id)) {
-    nameById.set(user.id, user.email ?? "");
+
+  // E-posta yedeği HERKES için: isimsiz eş-atananlar üyeye de "—" yerine
+  // tanımlı görünsün (küçük ofis modeli: herkes birbirini görebilir).
+  const { data: authUsers } = await createAdminClient().auth.admin.listUsers();
+  const emailById = new Map(
+    (authUsers?.users ?? []).map((u) => [u.id, u.email ?? ""])
+  );
+  for (const p of allProfiles ?? []) {
+    if (!p.full_name) {
+      nameById.set(p.id, emailById.get(p.id) ?? "");
+    }
   }
 
   let roles: { id: string; name: string }[] = [];
   let assignees: { id: string; label: string; roleId: string | null }[] = [];
 
   if (isAdmin) {
-    const [{ data: roleRows }, { data: authUsers }] = await Promise.all([
-      supabase.from("roles").select("id, name").order("created_at"),
-      createAdminClient().auth.admin.listUsers(),
-    ]);
-
+    const { data: roleRows } = await supabase
+      .from("roles")
+      .select("id, name")
+      .order("created_at");
     roles = roleRows ?? [];
-    const emailById = new Map(
-      (authUsers?.users ?? []).map((u) => [u.id, u.email ?? ""])
-    );
-    // Admin tüm kullanıcıların e-postasını görebilir; isimsiz profiller için
-    // hem atama listesinde hem görev satırlarında e-postaya düşülür.
-    for (const p of allProfiles ?? []) {
-      if (!p.full_name) {
-        nameById.set(p.id, emailById.get(p.id) ?? "");
-      }
-    }
     assignees = (allProfiles ?? [])
       .filter((p) => p.id !== user?.id) // yönetici kendine görev atayamaz
       .map((p) => ({
@@ -119,7 +130,9 @@ export default async function ProjectDetailPage({
                   <ProjectTaskRow
                     key={task.id}
                     task={task}
-                    assigneeName={nameById.get(task.assignee_id) ?? ""}
+                    assigneeNames={(assigneeIdsByTask.get(task.id) ?? []).map(
+                      (uid) => nameById.get(uid) ?? ""
+                    )}
                   />
                 ))}
               </ul>

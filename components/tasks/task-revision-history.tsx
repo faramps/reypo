@@ -19,6 +19,8 @@ export type RevisionItem = {
   note: string | null;
   created_at: string;
   authorName: string;
+  // revision_requested için: revizenin gönderildiği kişi (kişi bazlı revize).
+  targetName?: string | null;
 };
 
 // Görev detayında onay/revize turlarının geçmişi (append-only, eskiden yeniye).
@@ -47,6 +49,14 @@ export function TaskRevisionHistory({
                 <span className="text-muted-foreground">
                   {kindLabel[rev.kind]}
                 </span>
+                {rev.kind === "revision_requested" && rev.targetName && (
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    <span className="font-medium text-foreground">
+                      {rev.targetName}
+                    </span>
+                  </span>
+                )}
               </p>
               {rev.note && (
                 <p className="mt-1 whitespace-pre-wrap break-words rounded-lg bg-muted px-3 py-2 text-sm">

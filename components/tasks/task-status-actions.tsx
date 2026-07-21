@@ -5,17 +5,21 @@ import { RotateCcw } from "lucide-react";
 import { submitForApproval, reopenTask } from "@/lib/actions/tasks";
 import type { TaskStatus } from "@/lib/supabase/types";
 
-// Çalışan (atanan kişi) tarafı: durumu ilerletme butonları.
+// Çalışan (atanan kişi) tarafı: durum ilerletme butonları.
+// - "Tamamladım / Yeniden Gönder" kişinin KENDİ alt-durumuna (myStatus) göre çalışır.
+// - "Yeniden Aç" görevin genel durumuna (taskStatus === 'done') göre, yalnızca yönetici.
 // Onay bekleyen görev için yöneticinin onay/revize paneli ayrı bileşendedir
 // (task-approval-actions.tsx).
 export function TaskStatusActions({
   taskId,
-  status,
+  taskStatus,
+  myStatus,
   isAdmin,
   isAssignee,
 }: {
   taskId: string;
-  status: TaskStatus;
+  taskStatus: TaskStatus;
+  myStatus: TaskStatus | null;
   isAdmin: boolean;
   isAssignee: boolean;
 }) {
@@ -35,8 +39,8 @@ export function TaskStatusActions({
     });
   }
 
-  // Tamamlanmış görev: yalnızca yönetici yeniden açabilir.
-  if (status === "done") {
+  // Tamamlanmış görev: yalnızca yönetici yeniden açabilir (görev geneli).
+  if (taskStatus === "done") {
     if (!isAdmin) {
       return null;
     }
@@ -55,34 +59,33 @@ export function TaskStatusActions({
     );
   }
 
-  // Onay bekliyor: çalışana bilgi notu (yönetici paneli ayrı render edilir).
-  if (status === "awaiting_approval") {
-    if (isAssignee && !isAdmin) {
-      return (
-        <p className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
-          Görev onay için gönderildi. Yönetici incelemesi bekleniyor.
-        </p>
-      );
-    }
+  // Buradan sonrası yalnızca göreve atanmış kişiye ait (kendi işini ilerletir).
+  if (!isAssignee || !myStatus) {
     return null;
   }
 
-  // Durum ilerletme (Başladım / Tamamladım / Yeniden Gönder) yalnızca görevin
-  // atandığı kişiye aittir; yönetici işi onay panelinden yürütür. Yönetici
-  // başkasının görevinde bu butonları görmez (2026-07-14 ürün kararı).
-  if (!isAssignee) {
+  // Kişi kendi işini gönderdi: yönetici incelemesini bekliyor.
+  if (myStatus === "awaiting_approval") {
+    return (
+      <p className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+        İşinizi onaya gönderdiniz. Yönetici incelemesi bekleniyor.
+      </p>
+    );
+  }
+
+  // done (bireysel) ama görev henüz done değil: nadir; ilerletecek bir şey yok.
+  if (myStatus === "done") {
     return null;
   }
 
-  const primaryLabel = status === "revision" ? "Yeniden Gönder" : "Tamamladım";
+  const primaryLabel = myStatus === "revision" ? "Yeniden Gönder" : "Tamamladım";
 
   return (
     <ActionWrapper error={error}>
-      {status === "revision" && (
+      {myStatus === "revision" && (
         <div className="w-full space-y-2">
           <p className="text-sm text-rose-800">
-            Revize istendi. Aşağıdaki geçmişteki notu uygulayıp yeniden
-            gönderin.
+            Revize istendi. Aşağıdaki geçmişteki notu uygulayıp yeniden gönderin.
           </p>
           <textarea
             rows={2}
@@ -100,7 +103,7 @@ export function TaskStatusActions({
           run(() =>
             submitForApproval(
               taskId,
-              status === "revision" ? replyNote : undefined
+              myStatus === "revision" ? replyNote : undefined
             )
           )
         }

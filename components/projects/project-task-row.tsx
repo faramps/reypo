@@ -7,7 +7,7 @@ import type { TaskPriority, TaskStatus } from "@/lib/supabase/types";
 // avatar + isimle öne çıkarılır; durum bilgisini grup başlığı taşır.
 export function ProjectTaskRow({
   task,
-  assigneeName,
+  assigneeNames,
 }: {
   task: {
     id: string;
@@ -16,9 +16,14 @@ export function ProjectTaskRow({
     priority: TaskPriority;
     due_date: string | null;
   };
-  assigneeName: string;
+  assigneeNames: string[];
 }) {
   const overdue = isOverdue(task.due_date, task.status);
+  const primaryName = assigneeNames[0] ?? "";
+  const assigneeLabel =
+    assigneeNames.length <= 1
+      ? primaryName
+      : `${primaryName} +${assigneeNames.length - 1}`;
 
   return (
     <li>
@@ -27,12 +32,12 @@ export function ProjectTaskRow({
         className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 shadow-xs transition-all hover:border-ring/40 hover:shadow-sm"
       >
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
-          {initials(assigneeName)}
+          {initials(primaryName)}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{task.title}</span>
           <span className="block truncate text-xs text-muted-foreground">
-            {assigneeName || "—"}
+            {assigneeLabel || "—"}
             {task.due_date &&
               !overdue &&
               ` · Son tarih: ${formatDate(task.due_date)}`}

@@ -6,9 +6,36 @@ import { requireAdmin } from "./guard";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushToUser } from "@/lib/push";
-import type { TaskPriority } from "@/lib/supabase/types";
+import type { Database, TaskPriority } from "@/lib/supabase/types";
 
 export type TaskState = { error?: string; success?: boolean } | undefined;
+
+type DbClient = Awaited<ReturnType<typeof createClient>>;
+
+// Form'dan atanan kişi id'lerini oku (çoklu seçim: assignee_id çok kez gelir),
+// benzersizleştir ve boşları at.
+function readAssigneeIds(formData: FormData): string[] {
+  return Array.from(
+    new Set(
+      formData
+        .getAll("assignee_id")
+        .map((v) => String(v).trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+// Bir görevin atanan kişi id'leri (bildirim alıcıları için).
+async function taskAssigneeIds(
+  supabase: DbClient,
+  taskId: string
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("task_assignees")
+    .select("user_id")
+    .eq("task_id", taskId);
+  return (data ?? []).map((r) => r.user_id);
+}
 
 export async function createTask(
   _prevState: TaskState,
@@ -22,15 +49,15 @@ export async function createTask(
   const priority = String(formData.get("priority") ?? "normal") as TaskPriority;
   const dueDate = String(formData.get("due_date") ?? "") || null;
   const startDate = String(formData.get("start_date") ?? "") || null;
-  const assigneeId = String(formData.get("assignee_id") ?? "");
+  const assigneeIds = readAssigneeIds(formData);
   const roleId = String(formData.get("role_id") ?? "") || null;
 
-  if (!projectId || !title || !assigneeId) {
-    return { error: "Başlık ve atanan kişi zorunlu." };
+  if (!projectId || !title || assigneeIds.length === 0) {
+    return { error: "Başlık ve en az bir atanan kişi zorunlu." };
   }
 
   // Ürün kararı (2026-07-09): yönetici kendine görev atayamaz.
-  if (assigneeId === user.id) {
+  if (assigneeIds.includes(user.id)) {
     return { error: "Kendinize görev atayamazsınız." };
   }
 
@@ -43,7 +70,6 @@ export async function createTask(
       priority,
       due_date: dueDate,
       start_date: startDate,
-      assignee_id: assigneeId,
       role_id: roleId,
       created_by: user.id,
     })
@@ -55,23 +81,40 @@ export async function createTask(
     return { error: "Görev oluşturulamadı." };
   }
 
+  const { error: assignErr } = await supabase
+    .from("task_assignees")
+    .insert(assigneeIds.map((uid) => ({ task_id: task.id, user_id: uid })));
+
+  if (assignErr) {
+    console.error("createTask atama hatası:", assignErr);
+    // Görev atamasız kalmasın: oluşturulan görevi geri al.
+    await supabase.from("tasks").delete().eq("id", task.id);
+    return { error: "Görev atanamadı." };
+  }
+
   // notifications tablosunda authenticated insert policy'si yok (bkz. migration) —
-  // atanan kişi admin'den farklı olduğu için bu ekleme RLS'i atlayan admin client ile yapılır.
+  // atananlar admin'den farklı olduğu için bu ekleme RLS'i atlayan admin client ile yapılır.
   await createAdminClient()
     .from("notifications")
-    .insert({
-      user_id: assigneeId,
-      type: "task_assigned",
-      title: "Yeni görev atandı",
-      body: task.title,
-      task_id: task.id,
-    });
+    .insert(
+      assigneeIds.map((uid) => ({
+        user_id: uid,
+        type: "task_assigned" as const,
+        title: "Yeni görev atandı",
+        body: task.title,
+        task_id: task.id,
+      }))
+    );
 
-  await sendPushToUser(assigneeId, {
-    title: "Yeni görev atandı",
-    body: task.title,
-    taskId: task.id,
-  });
+  await Promise.all(
+    assigneeIds.map((uid) =>
+      sendPushToUser(uid, {
+        title: "Yeni görev atandı",
+        body: task.title,
+        taskId: task.id,
+      })
+    )
+  );
 
   revalidatePath(`/app/projects/${projectId}`);
   revalidatePath("/app/admin/calendar");
@@ -91,25 +134,35 @@ export async function updateTask(
   const priority = String(formData.get("priority") ?? "normal") as TaskPriority;
   const dueDate = String(formData.get("due_date") ?? "") || null;
   const startDate = String(formData.get("start_date") ?? "") || null;
-  const assigneeId = String(formData.get("assignee_id") ?? "");
+  const assigneeIds = readAssigneeIds(formData);
   const roleId = String(formData.get("role_id") ?? "") || null;
 
-  if (!taskId || !title || !assigneeId) {
-    return { error: "Başlık ve atanan kişi zorunlu." };
+  if (!taskId || !title || assigneeIds.length === 0) {
+    return { error: "Başlık ve en az bir atanan kişi zorunlu." };
   }
-  if (assigneeId === user.id) {
+  if (assigneeIds.includes(user.id)) {
     return { error: "Kendinize görev atayamazsınız." };
   }
 
   const { data: existing } = await supabase
     .from("tasks")
-    .select("id, project_id, assignee_id")
+    .select("id, project_id")
     .eq("id", taskId)
     .single();
 
   if (!existing) {
     return { error: "Görev bulunamadı." };
   }
+
+  const { data: currentRows } = await supabase
+    .from("task_assignees")
+    .select("user_id")
+    .eq("task_id", taskId);
+  const current = new Set((currentRows ?? []).map((r) => r.user_id));
+  const next = new Set(assigneeIds);
+  const toAdd = assigneeIds.filter((id) => !current.has(id));
+  const toRemove = [...current].filter((id) => !next.has(id));
+  const kept = assigneeIds.filter((id) => current.has(id));
 
   const { error } = await supabase
     .from("tasks")
@@ -119,7 +172,6 @@ export async function updateTask(
       priority,
       due_date: dueDate,
       start_date: startDate,
-      assignee_id: assigneeId,
       role_id: roleId,
     })
     .eq("id", taskId);
@@ -129,24 +181,59 @@ export async function updateTask(
     return { error: "Görev güncellenemedi." };
   }
 
-  const assigneeChanged = existing.assignee_id !== assigneeId;
-  const notifTitle = assigneeChanged ? "Yeni görev atandı" : "Görev güncellendi";
+  if (toAdd.length > 0) {
+    const { error: addErr } = await supabase
+      .from("task_assignees")
+      .insert(toAdd.map((uid) => ({ task_id: taskId, user_id: uid })));
+    if (addErr) {
+      console.error("updateTask atama ekleme hatası:", addErr);
+      return { error: "Atananlar güncellenemedi." };
+    }
+  }
+  if (toRemove.length > 0) {
+    await supabase
+      .from("task_assignees")
+      .delete()
+      .eq("task_id", taskId)
+      .in("user_id", toRemove);
+  }
 
-  await createAdminClient()
-    .from("notifications")
-    .insert({
-      user_id: assigneeId,
-      type: assigneeChanged ? ("task_assigned" as const) : ("task_updated" as const),
-      title: notifTitle,
+  // Bildirimler: yeni eklenenlere "atandı", kalanlara "güncellendi",
+  // çıkarılanlara "görevden çıkarıldınız".
+  const notifRows: Database["public"]["Tables"]["notifications"]["Insert"][] = [
+    ...toAdd.map((uid) => ({
+      user_id: uid,
+      type: "task_assigned" as const,
+      title: "Yeni görev atandı",
       body: title,
       task_id: taskId,
-    });
-
-  await sendPushToUser(assigneeId, {
-    title: notifTitle,
-    body: title,
-    taskId,
-  });
+    })),
+    ...kept.map((uid) => ({
+      user_id: uid,
+      type: "task_updated" as const,
+      title: "Görev güncellendi",
+      body: title,
+      task_id: taskId,
+    })),
+    ...toRemove.map((uid) => ({
+      user_id: uid,
+      type: "task_updated" as const,
+      title: "Görevden çıkarıldınız",
+      body: title,
+      task_id: taskId,
+    })),
+  ];
+  if (notifRows.length > 0) {
+    await createAdminClient().from("notifications").insert(notifRows);
+  }
+  await Promise.all([
+    ...toAdd.map((uid) =>
+      sendPushToUser(uid, { title: "Yeni görev atandı", body: title, taskId })
+    ),
+    ...kept.map((uid) =>
+      sendPushToUser(uid, { title: "Görev güncellendi", body: title, taskId })
+    ),
+  ]);
 
   revalidatePath("/app");
   revalidatePath(`/app/tasks/${taskId}`);
@@ -168,7 +255,7 @@ export async function deleteTask(taskId: string) {
     redirect("/app/projects");
   }
 
-  // Göreve bağlı bildirimler FK cascade ile birlikte silinir.
+  // Göreve bağlı atamalar/bildirimler FK cascade ile birlikte silinir.
   await supabase.from("tasks").delete().eq("id", taskId);
 
   revalidatePath("/app");
@@ -178,15 +265,17 @@ export async function deleteTask(taskId: string) {
 }
 
 // =========================================================
-// Onay + revize akışı (PLAN.md #11.1 güncellendi: onay akışı VAR).
-// todo/revision --(çalışan: Tamamladım)--> awaiting_approval
-// awaiting_approval --(admin: approve)--> done
-// awaiting_approval --(admin: requestRevision + not)--> revision
-// "Başladım" adımı kaldırıldı (2026-07-14): in_progress durumu yalnızca
-// eski kayıtların görüntülenmesi için tanınır; yeni geçiş üretilmez.
+// Onay + revize akışı — çok kişili (2026-07-21).
+// Her atanan KENDİ task_assignees satırını ilerletir; tasks.status DB trigger'ı
+// ile rollup olarak hesaplanır (herkes awaiting -> awaiting_approval).
+//   todo/revision --(atanan: Tamamladım)--> (kişi) awaiting_approval
+//   HERKES awaiting olunca görev awaiting_approval -> yönetici bilgilendirilir.
+//   Yönetici: Onayla -> herkes done | kişi bazlı Revize -> seçilenler revision.
+// "in_progress" yalnızca "biri bitirdi, diğeri bekliyor" ara durumunu ve eski
+// kayıtları temsil eder; doğrudan bu duruma geçiş üretilmez.
 // =========================================================
 
-// Ortak: oturumdaki kullanıcı + görev + admin bilgisini yükler.
+// Ortak: oturumdaki kullanıcı + görev + admin + çağıranın kendi atama satırı.
 async function loadTaskActor(taskId: string) {
   const supabase = await createClient();
   const {
@@ -199,7 +288,7 @@ async function loadTaskActor(taskId: string) {
 
   const { data: task } = await supabase
     .from("tasks")
-    .select("id, project_id, title, status, assignee_id, created_by")
+    .select("id, project_id, title, status, created_by")
     .eq("id", taskId)
     .single();
 
@@ -207,20 +296,29 @@ async function loadTaskActor(taskId: string) {
     throw new Error("Görev bulunamadı.");
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("system_role")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, { data: myRow }] = await Promise.all([
+    supabase.from("profiles").select("system_role").eq("id", user.id).single(),
+    supabase
+      .from("task_assignees")
+      .select("status")
+      .eq("task_id", taskId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
 
-  return { supabase, user, task, isAdmin: profile?.system_role === "admin" };
+  return {
+    supabase,
+    user,
+    task,
+    isAdmin: profile?.system_role === "admin",
+    isAssignee: !!myRow,
+    myAssigneeStatus: myRow?.status ?? null,
+  };
 }
 
-// Çalışan aksiyonlarının (başladı/onaya gönderdi) bildirim alıcısı: görevi
-// atayan yönetici (ürün kararı 2026-07-14: tüm yöneticiler DEĞİL). Atayan
-// silinmişse (created_by null) tüm yöneticilere düşer; işlemi yapanın
-// kendisine bildirim gitmez. Görünürlük değişmez: tüm yöneticiler tüm
-// görevleri görmeye devam eder (RLS).
+// Çalışan aksiyonlarının (onaya gönderdi) bildirim alıcısı: görevi atayan
+// yönetici (ürün kararı 2026-07-14: tüm yöneticiler DEĞİL). Atayan silinmişse
+// (created_by null) tüm yöneticilere düşer; işlemi yapanın kendisine gitmez.
 async function assignerRecipients(
   createdBy: string | null,
   actorId: string
@@ -248,20 +346,21 @@ function revalidateTask(taskId: string, projectId: string) {
   revalidatePath("/app/calendar");
 }
 
-// Çalışan (veya admin): "Tamamladım" — görevi yönetici onayına gönderir.
-// completed_at burada set EDİLMEZ; yalnızca onayda set edilir.
-// note: isteğe bağlı cevap (özellikle revize sonrası "şunu düzelttim" notu);
-// geçmişte çalışanın satırında görünür ve yöneticiye giden bildirimde yer alır.
+// Atanan: "Tamamladım" — kendi işini yönetici onayına gönderir (kişi bazlı).
+// completed_at burada set EDİLMEZ; yalnızca tüm görev onaylanınca set edilir.
+// note: isteğe bağlı cevap (özellikle revize sonrası "şunu düzelttim" notu).
+// Yöneticiye bildirim YALNIZCA herkes tamamlayınca (rollup awaiting_approval) gider.
 export async function submitForApproval(taskId: string, note?: string) {
-  const { supabase, user, task, isAdmin } = await loadTaskActor(taskId);
+  const { supabase, user, task, isAssignee, myAssigneeStatus } =
+    await loadTaskActor(taskId);
 
-  if (!isAdmin && task.assignee_id !== user.id) {
-    throw new Error("Bu görevi güncelleme yetkiniz yok.");
+  if (!isAssignee) {
+    throw new Error("Bu görevde atanmış değilsiniz.");
   }
   if (
-    task.status !== "todo" &&
-    task.status !== "in_progress" &&
-    task.status !== "revision"
+    myAssigneeStatus !== "todo" &&
+    myAssigneeStatus !== "in_progress" &&
+    myAssigneeStatus !== "revision"
   ) {
     throw new Error("Görev şu anda onaya gönderilemez.");
   }
@@ -269,52 +368,61 @@ export async function submitForApproval(taskId: string, note?: string) {
   const trimmedNote = note?.trim() || null;
 
   const { error } = await supabase
-    .from("tasks")
+    .from("task_assignees")
     .update({ status: "awaiting_approval" })
-    .eq("id", taskId);
+    .eq("task_id", taskId)
+    .eq("user_id", user.id);
   if (error) {
     throw new Error("Görev güncellenemedi.");
   }
 
-  // Geçmişe "onaya gönderildi" kaydı (append-only).
+  // Geçmişe "onaya gönderildi" kaydı (append-only); hedef = gönderen kişi.
   await supabase.from("task_revisions").insert({
     task_id: taskId,
     author_id: user.id,
+    target_user_id: user.id,
     kind: "submitted",
     note: trimmedNote,
   });
 
-  // Onay bekleyen görevi atayan yöneticiye bildir (gönderenin kendisi hariç).
-  const recipients = await assignerRecipients(task.created_by, user.id);
+  // Rollup trigger tasks.status'u güncelledi; yalnızca HERKES bitince bildir.
+  const { data: updated } = await supabase
+    .from("tasks")
+    .select("status")
+    .eq("id", taskId)
+    .single();
 
-  if (recipients.length > 0) {
-    const notifBody = trimmedNote
-      ? `${task.title} — ${trimmedNote}`
-      : task.title;
-    await createAdminClient().from("notifications").insert(
-      recipients.map((id) => ({
-        user_id: id,
-        type: "task_submitted" as const,
-        title: "Görev onayınızı bekliyor",
-        body: notifBody,
-        task_id: task.id,
-      }))
-    );
-    await Promise.all(
-      recipients.map((id) =>
-        sendPushToUser(id, {
+  if (updated?.status === "awaiting_approval") {
+    const recipients = await assignerRecipients(task.created_by, user.id);
+    if (recipients.length > 0) {
+      const notifBody = trimmedNote
+        ? `${task.title} — ${trimmedNote}`
+        : task.title;
+      await createAdminClient().from("notifications").insert(
+        recipients.map((id) => ({
+          user_id: id,
+          type: "task_submitted" as const,
           title: "Görev onayınızı bekliyor",
           body: notifBody,
-          taskId: task.id,
-        })
-      )
-    );
+          task_id: task.id,
+        }))
+      );
+      await Promise.all(
+        recipients.map((id) =>
+          sendPushToUser(id, {
+            title: "Görev onayınızı bekliyor",
+            body: notifBody,
+            taskId: task.id,
+          })
+        )
+      );
+    }
   }
 
   revalidateTask(taskId, task.project_id);
 }
 
-// Yönetici: onaya düşen görevi onaylar -> done. İsteğe bağlı not.
+// Yönetici: onaya düşen görevi onaylar -> tüm atananlar done (rollup done).
 export async function approveTask(taskId: string, note?: string) {
   const { supabase, user, task, isAdmin } = await loadTaskActor(taskId);
 
@@ -326,11 +434,14 @@ export async function approveTask(taskId: string, note?: string) {
   }
 
   const trimmed = note?.trim() || null;
+  const recipients = (await taskAssigneeIds(supabase, taskId)).filter(
+    (id) => id !== user.id
+  );
 
   const { error } = await supabase
-    .from("tasks")
+    .from("task_assignees")
     .update({ status: "done", completed_at: new Date().toISOString() })
-    .eq("id", taskId);
+    .eq("task_id", taskId);
   if (error) {
     throw new Error("Görev güncellenemedi.");
   }
@@ -338,31 +449,42 @@ export async function approveTask(taskId: string, note?: string) {
   await supabase.from("task_revisions").insert({
     task_id: taskId,
     author_id: user.id,
+    target_user_id: null,
     kind: "approved",
     note: trimmed,
   });
 
-  // Atanan kişiyi bilgilendir (yöneticinin kendisi atanan değilse).
-  if (task.assignee_id !== user.id) {
-    await createAdminClient().from("notifications").insert({
-      user_id: task.assignee_id,
-      type: "task_approved",
-      title: "Göreviniz onaylandı",
-      body: task.title,
-      task_id: task.id,
-    });
-    await sendPushToUser(task.assignee_id, {
-      title: "Göreviniz onaylandı",
-      body: task.title,
-      taskId: task.id,
-    });
+  if (recipients.length > 0) {
+    await createAdminClient().from("notifications").insert(
+      recipients.map((id) => ({
+        user_id: id,
+        type: "task_approved" as const,
+        title: "Göreviniz onaylandı",
+        body: task.title,
+        task_id: task.id,
+      }))
+    );
+    await Promise.all(
+      recipients.map((id) =>
+        sendPushToUser(id, {
+          title: "Göreviniz onaylandı",
+          body: task.title,
+          taskId: task.id,
+        })
+      )
+    );
   }
 
   revalidateTask(taskId, task.project_id);
 }
 
-// Yönetici: onaya düşen görevi revize notuyla geri gönderir -> revision. Not zorunlu.
-export async function requestRevision(taskId: string, note: string) {
+// Yönetici: onaya düşen görevi kişi bazlı revize notlarıyla geri gönderir.
+// entries: revize edilecek her kişi + notu (ortak revizede aynı not tekrarlanır).
+// Not verilmeyen kişiler awaiting_approval'da kalır (kabul-bekliyor / kısmi onay).
+export async function requestRevisions(
+  taskId: string,
+  entries: { userId: string; note: string }[]
+) {
   const { supabase, user, task, isAdmin } = await loadTaskActor(taskId);
 
   if (!isAdmin) {
@@ -372,45 +494,65 @@ export async function requestRevision(taskId: string, note: string) {
     throw new Error("Yalnızca onay bekleyen görev için revize istenebilir.");
   }
 
-  const trimmed = note?.trim();
-  if (!trimmed) {
-    throw new Error("Revize notu zorunlu.");
+  const valid = entries
+    .map((e) => ({ userId: String(e.userId), note: e.note.trim() }))
+    .filter((e) => e.userId && e.note);
+  if (valid.length === 0) {
+    throw new Error("En az bir kişiye revize notu yazın.");
   }
 
-  const { error } = await supabase
-    .from("tasks")
-    .update({ status: "revision" })
-    .eq("id", taskId);
-  if (error) {
-    throw new Error("Görev güncellenemedi.");
+  // Yalnızca gerçekten atanmış kişilere revize verilebilir.
+  const assigneeSet = new Set(await taskAssigneeIds(supabase, taskId));
+  for (const e of valid) {
+    if (!assigneeSet.has(e.userId)) {
+      throw new Error("Geçersiz atanan kişi.");
+    }
   }
 
-  await supabase.from("task_revisions").insert({
-    task_id: taskId,
-    author_id: user.id,
-    kind: "revision_requested",
-    note: trimmed,
-  });
+  for (const e of valid) {
+    const { error } = await supabase
+      .from("task_assignees")
+      .update({ status: "revision", completed_at: null })
+      .eq("task_id", taskId)
+      .eq("user_id", e.userId);
+    if (error) {
+      throw new Error("Görev güncellenemedi.");
+    }
+    await supabase.from("task_revisions").insert({
+      task_id: taskId,
+      author_id: user.id,
+      target_user_id: e.userId,
+      kind: "revision_requested",
+      note: e.note,
+    });
+  }
 
-  if (task.assignee_id !== user.id) {
-    await createAdminClient().from("notifications").insert({
-      user_id: task.assignee_id,
-      type: "task_revision_requested",
-      title: "Görev için revize istendi",
-      body: trimmed,
-      task_id: task.id,
-    });
-    await sendPushToUser(task.assignee_id, {
-      title: "Görev için revize istendi",
-      body: trimmed,
-      taskId: task.id,
-    });
+  const notifTargets = valid.filter((e) => e.userId !== user.id);
+  if (notifTargets.length > 0) {
+    await createAdminClient().from("notifications").insert(
+      notifTargets.map((e) => ({
+        user_id: e.userId,
+        type: "task_revision_requested" as const,
+        title: "Görev için revize istendi",
+        body: e.note,
+        task_id: taskId,
+      }))
+    );
+    await Promise.all(
+      notifTargets.map((e) =>
+        sendPushToUser(e.userId, {
+          title: "Görev için revize istendi",
+          body: e.note,
+          taskId,
+        })
+      )
+    );
   }
 
   revalidateTask(taskId, task.project_id);
 }
 
-// Yönetici: tamamlanmış görevi yeniden açar -> todo. completed_at sıfırlanır.
+// Yönetici: tamamlanmış görevi yeniden açar -> tüm atananlar todo. completed_at sıfırlanır.
 export async function reopenTask(taskId: string) {
   const { supabase, user, task, isAdmin } = await loadTaskActor(taskId);
 
@@ -421,27 +563,37 @@ export async function reopenTask(taskId: string) {
     throw new Error("Yalnızca tamamlanmış görev yeniden açılabilir.");
   }
 
+  const recipients = (await taskAssigneeIds(supabase, taskId)).filter(
+    (id) => id !== user.id
+  );
+
   const { error } = await supabase
-    .from("tasks")
+    .from("task_assignees")
     .update({ status: "todo", completed_at: null })
-    .eq("id", taskId);
+    .eq("task_id", taskId);
   if (error) {
     throw new Error("Görev güncellenemedi.");
   }
 
-  if (task.assignee_id !== user.id) {
-    await createAdminClient().from("notifications").insert({
-      user_id: task.assignee_id,
-      type: "task_updated",
-      title: "Görev yeniden açıldı",
-      body: task.title,
-      task_id: task.id,
-    });
-    await sendPushToUser(task.assignee_id, {
-      title: "Görev yeniden açıldı",
-      body: task.title,
-      taskId: task.id,
-    });
+  if (recipients.length > 0) {
+    await createAdminClient().from("notifications").insert(
+      recipients.map((id) => ({
+        user_id: id,
+        type: "task_updated" as const,
+        title: "Görev yeniden açıldı",
+        body: task.title,
+        task_id: task.id,
+      }))
+    );
+    await Promise.all(
+      recipients.map((id) =>
+        sendPushToUser(id, {
+          title: "Görev yeniden açıldı",
+          body: task.title,
+          taskId: task.id,
+        })
+      )
+    );
   }
 
   revalidateTask(taskId, task.project_id);
